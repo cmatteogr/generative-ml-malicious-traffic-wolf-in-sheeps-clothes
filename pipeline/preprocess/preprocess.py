@@ -5,6 +5,10 @@ Preprocess
 """
 from typing import List, Tuple
 import pandas as pd
+from pipeline.preprocess.preprocess_base import map_port_usage_category
+
+# NOTE: Watch this video to understand about Kurtosis and Skewness:
+# https://www.youtube.com/watch?v=EWuR4EGc9EY
 
 def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traffic_types: List[str],
                   valid_port_range: Tuple, valid_protocol_values: List[str]) -> str:
@@ -125,6 +129,12 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     )
     # apply filter valid values rules
     traffic_df = traffic_df[valid_mask].copy()
+
+    # apply destination and source ports Well-Known Port Ranges for Standardized Functionalities transformations
+    traffic_df['Source Port'] = traffic_df['Source Port'].map(map_port_usage_category)
+    traffic_df['Destination Port'] = traffic_df['Destination Port'].map(map_port_usage_category)
+
+
 
     # Apply Down sampling to solve the unbalanced
     n_instances_per_traffic_type = 150000
