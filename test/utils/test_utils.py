@@ -9,4 +9,4 @@ def test_generate_profiling_report():
     type_schema = {'Label': "categorical"}
 
     generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=data_filepath,
-                              type_schema=type_schema)
+                              type_schema=type_schema, minimal=False)

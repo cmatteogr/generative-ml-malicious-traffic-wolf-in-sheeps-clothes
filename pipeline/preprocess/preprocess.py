@@ -9,6 +9,10 @@ from pipeline.preprocess.preprocess_base import map_port_usage_category
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
 # https://www.youtube.com/watch?v=EWuR4EGc9EY
+# To learn about quantiles and percentiles:
+# https://www.youtube.com/watch?v=IFKQLDmRK0Y
+# To learn about standard deviation, mean, variance:
+# https://www.youtube.com/watch?v=SzZ6GpcfoQY
 
 def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traffic_types: List[str],
                   valid_port_range: Tuple, valid_protocol_values: List[str]) -> str:
