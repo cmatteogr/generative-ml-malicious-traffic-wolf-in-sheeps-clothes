@@ -33,8 +33,8 @@ RELEVANT_COLUMNS = [
     ' Bwd Packet Length Mean',
     ' Bwd Packet Length Std',
 
-    'Flow Bytes/s',
-    ' Flow Packets/s',
+    #'Flow Bytes/s',
+    #' Flow Packets/s',
 
     ' Flow IAT Mean',
     ' Flow IAT Std',
@@ -55,8 +55,8 @@ RELEVANT_COLUMNS = [
     ' Fwd Header Length',
     ' Bwd Header Length',
 
-    'Fwd Packets/s',
-    ' Bwd Packets/s',
+    #'Fwd Packets/s',
+    #' Bwd Packets/s',
     #' Min Packet Length',
     #' Max Packet Length',
     ' Packet Length Mean',
@@ -66,11 +66,11 @@ RELEVANT_COLUMNS = [
     ' PSH Flag Count',
     ' ACK Flag Count',
 
-    ' Down/Up Ratio',
+    #' Down/Up Ratio',
 
-    ' Average Packet Size',
-    ' Avg Fwd Segment Size',
-    ' Avg Bwd Segment Size',
+    #' Average Packet Size',
+    #' Avg Fwd Segment Size',
+    #' Avg Bwd Segment Size',
 
     'Subflow Fwd Packets',
     ' Subflow Fwd Bytes',

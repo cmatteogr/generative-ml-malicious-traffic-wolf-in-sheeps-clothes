@@ -58,8 +58,8 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
         (traffic_df['Bwd Packet Length Std'] >= 0) &
 
         # Rates (Bytes/s, Packets/s) >= 0
-        (traffic_df['Flow Bytes/s'] >= 0) &
-        (traffic_df['Flow Packets/s'] >= 0) &
+        #(traffic_df['Flow Bytes/s'] >= 0) &
+        #(traffic_df['Flow Packets/s'] >= 0) &
 
         # Flow IAT and Fwd/Bwd IAT stats >= 0
         (traffic_df['Flow IAT Mean'] >= 0) &
@@ -82,8 +82,8 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
         (traffic_df['Bwd Header Length'] >= 0) &
 
         # Fwd/Bwd Packets per second >= 0
-        (traffic_df['Fwd Packets/s'] >= 0) &
-        (traffic_df['Bwd Packets/s'] >= 0) &
+        #(traffic_df['Fwd Packets/s'] >= 0) &
+        #(traffic_df['Bwd Packets/s'] >= 0) &
 
         # Min/Max Packet Length >= 0, plus means/stdev/variance
         #(traffic_df['Min Packet Length'] >= 0) &
@@ -97,12 +97,12 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
         (traffic_df['ACK Flag Count'] >= 0) &
 
         # Down/Up Ratio >= 0
-        (traffic_df['Down/Up Ratio'] >= 0) &
+        #(traffic_df['Down/Up Ratio'] >= 0) &
 
         # Average packet sizes >= 0
-        (traffic_df['Average Packet Size'] >= 0) &
-        (traffic_df['Avg Fwd Segment Size'] >= 0) &
-        (traffic_df['Avg Bwd Segment Size'] >= 0) &
+        #(traffic_df['Average Packet Size'] >= 0) &
+        #(traffic_df['Avg Fwd Segment Size'] >= 0) &
+        #(traffic_df['Avg Bwd Segment Size'] >= 0) &
 
         # Subflows >= 0
         (traffic_df['Subflow Fwd Packets'] >= 0) &
