@@ -6,6 +6,8 @@ Preprocess
 from typing import List, Tuple
 import pandas as pd
 from pipeline.preprocess.preprocess_base import map_port_usage_category
+import mlflow
+
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
 # https://www.youtube.com/watch?v=EWuR4EGc9EY
@@ -157,6 +159,13 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     # save preprocessed data
     traffic_filepath = 'traffic_preprocessed.csv'
     traffic_df.to_csv(traffic_filepath, index=False)
+
+    # Log the hyperparameters
+    params = {
+        "relvant_columns": relevant_column,
+        "valid_traffic": valid_traffic_types
+    }
+    mlflow.log_params(params)
 
     # return preprocessed data filepath
     return traffic_filepath
