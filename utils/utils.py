@@ -20,15 +20,14 @@ def generate_profiling_report(title:str, report_filepath:str,  df: pd.DataFrame=
     df_profile.to_file(report_filepath)
 
 
-def compare_profiling_report(title:str, report_filepath:str,  data_filepath_a:str, data_filepath_b:str,
-                              type_schema=None, minimal:bool=True):
+def compare_profiling_report(report_filepath:str, data_a:dict, data_b:dict, minimal:bool=True):
     # read dfs
-    a_df = pd.read_csv(data_filepath_a)
-    b_df = pd.read_csv(data_filepath_b)
+    a_df = pd.read_csv(data_a['filepath'])
+    b_df = pd.read_csv(data_b['filepath'])
 
     # generate data profiling report
-    a_df_profile = ProfileReport(a_df, title=title, minimal=minimal, type_schema=type_schema)
-    b_df_profile = ProfileReport(b_df, title=title, minimal=minimal, type_schema=type_schema)
+    a_df_profile = ProfileReport(a_df, title=data_a['title'], minimal=minimal, type_schema=data_a['type_schema'])
+    b_df_profile = ProfileReport(b_df, title=data_b['title'], minimal=minimal, type_schema=data_a['type_schema'])
 
     # compare reports
     comparison_report = a_df_profile.compare(b_df_profile)

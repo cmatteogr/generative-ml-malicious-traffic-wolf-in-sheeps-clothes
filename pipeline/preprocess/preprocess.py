@@ -10,8 +10,9 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer
 from pipeline.preprocess.preprocess_base import map_port_usage_category
+from sklearn.preprocessing import RobustScaler
 import mlflow
 
 
@@ -33,6 +34,10 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     traffic_df = traffic_df[relevant_column]
     # format the columns names
     traffic_df.rename(columns=lambda x: x.strip(), inplace=True)
+
+    base_traffic_filepath = 'traffic_preprocessed_base.csv'
+    traffic_df.to_csv(base_traffic_filepath, index=False)
+
 
     # filter instances with invalid values
     min_port, max_port = valid_port_range
@@ -179,6 +184,18 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     threshold = np.percentile(distances, 95)
     # filter by the centroid distance
     traffic_df = traffic_df[distances <= threshold]
+
+
+    #trans = RobustScaler()
+    #traffic_df['Total Fwd Packets'] = trans.fit_transform(traffic_df[['Total Fwd Packets']])
+    #trans = RobustScaler()
+    #traffic_df['Bwd IAT Total Robust'] = trans.fit_transform(traffic_df[['Bwd IAT Total']])
+    pt = PowerTransformer(method='yeo-johnson')
+    power_columns = ['Flow Duration', 'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
+                     'Bwd Packet Length Std', 'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Total', 'Fwd IAT Mean',
+                     'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
+    traffic_df[power_columns] = pt.fit_transform(traffic_df[power_columns])
+
 
     # Note: Below the under sampling you can find the
 
