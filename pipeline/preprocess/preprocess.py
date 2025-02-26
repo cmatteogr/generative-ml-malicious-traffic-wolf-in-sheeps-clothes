@@ -294,16 +294,8 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     # concatenate traffic df
     X_train = pd.concat(x_train_traffic_df_list, axis=0)
 
-    # Save Isolation Forest model
-    #iso_filepath = os.path.join(artifacts_folder, PR_OUTLIER_DETECTION_MODEL_NAME)
-    #joblib.dump(iso_forest, iso_filepath)
-
     train_traffic_df = X_train.copy()
     test_traffic_df = X_test.copy()
-
-    # Add price columns
-    #train_traffic_df['Label'] = y_train
-    #test_traffic_df['Label'] = y_test
 
     print('save preprocessed data')
     # save preprocessed data
