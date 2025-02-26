@@ -38,7 +38,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     base_traffic_filepath = 'traffic_preprocessed_base.csv'
     traffic_df.to_csv(base_traffic_filepath, index=False)
 
-
+    print('filter by valid data ranges')
     # filter instances with invalid values
     min_port, max_port = valid_port_range
 
@@ -115,30 +115,45 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     )
     # apply filter valid values rules
     traffic_df = traffic_df[valid_mask].copy()
+    print(f'traffic df shape: {traffic_df.shape}')
 
+    # pop label
+    label = traffic_df.pop('Label')
+    # Split dataset
+    X_train, X_test, y_train, y_test = train_test_split(traffic_df, label, test_size=test_size, random_state=42)
+
+    print('transform port types')
     # apply destination and source ports Well-Known Port Ranges for Standardized Functionalities transformations
-    traffic_df['Source Port'] = traffic_df['Source Port'].map(map_port_usage_category)
-    traffic_df['Destination Port'] = traffic_df['Destination Port'].map(map_port_usage_category)
+    X_train['Source Port'] = X_train['Source Port'].map(map_port_usage_category)
+    X_train['Destination Port'] = X_train['Destination Port'].map(map_port_usage_category)
+    X_test['Source Port'] = X_test['Source Port'].map(map_port_usage_category)
+    X_test['Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
 
+    print('handle data skewness')
     # compute the threshold quantile
-    total_fwd_packets_q_threshold = traffic_df['Total Fwd Packets'].quantile(0.95)
+    total_fwd_packets_q_threshold = X_train['Total Fwd Packets'].quantile(0.95)
     # filter rows where 'Total Fwd Packets' is less than or equal to the threshold quantile
-    traffic_df = traffic_df[traffic_df['Total Fwd Packets'] <= total_fwd_packets_q_threshold]
+    X_train = X_train[X_train['Total Fwd Packets'] <= total_fwd_packets_q_threshold]
+    X_test = X_test[X_test['Total Fwd Packets'] <= total_fwd_packets_q_threshold]
+    print(f'traffic df shape: {X_train.shape}')
 
     # compute the threshold quantile
-    total_backward_packets_q_threshold = traffic_df['Total Backward Packets'].quantile(0.95)
+    total_backward_packets_q_threshold = X_train['Total Backward Packets'].quantile(0.95)
     # filter rows where 'Total Backward Packets' is less than or equal to the threshold quantile
-    traffic_df = traffic_df[traffic_df['Total Backward Packets'] <= total_backward_packets_q_threshold]
+    X_train = X_train[X_train['Total Backward Packets'] <= total_backward_packets_q_threshold]
+    X_test = X_test[X_test['Total Backward Packets'] <= total_backward_packets_q_threshold]
 
     # compute the threshold quantile
-    total_length_fwd_packets_q_threshold = traffic_df['Total Length of Fwd Packets'].quantile(0.95)
+    total_length_fwd_packets_q_threshold = X_train['Total Length of Fwd Packets'].quantile(0.95)
     # filter rows where 'Total Length of Fwd Packets' is less than or equal to the threshold quantile
-    traffic_df = traffic_df[traffic_df['Total Length of Fwd Packets'] <= total_length_fwd_packets_q_threshold]
+    X_train = X_train[X_train['Total Length of Fwd Packets'] <= total_length_fwd_packets_q_threshold]
+    X_test = X_test[X_test['Total Length of Fwd Packets'] <= total_length_fwd_packets_q_threshold]
 
     # compute the threshold quantile
-    total_length_bwd_packets_q_threshold = traffic_df['Total Length of Bwd Packets'].quantile(0.95)
+    total_length_bwd_packets_q_threshold = X_train['Total Length of Bwd Packets'].quantile(0.95)
     # filter rows where 'Total Length of Bwd Packets' is less than or equal to the threshold quantile
-    traffic_df = traffic_df[traffic_df['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
+    X_train = X_train[X_train['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
+    X_test = X_test[X_test['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
     
     # Apply anomaly detection model to clean the distribution features. It includes features with mean and standard deviation
     # NOTE: Several methods could be applied like, z-score, quantiles, DBSCAN, isolation forest, KMeans, etc.
@@ -149,92 +164,103 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     # Isolation Forest: https://hands-on.cloud/using-python-and-isolation-forest-algorithm-for-anomalies-detection/
     # Mahalanobis Distance: https://blog.dailydoseofds.com/p/the-limitation-of-euclidean-distance
 
+    print('remove outliers')
     # anomaly detection using z-score
     # Fwd Packet Length Mean
-    fwd_packet_length_mean = traffic_df['Fwd Packet Length Mean']
+    fwd_packet_len_mean = X_train['Fwd Packet Length Mean']
     threshold_fwd_packet_length_mean = 3
-    mean_fwd_packet_length_mean = np.mean(fwd_packet_length_mean)
-    std_dev_fwd_packet_length_mean = np.std(fwd_packet_length_mean)
+    mean_fwd_packet_len_mean = np.mean(fwd_packet_len_mean)
+    std_fwd_packet_len_mean = np.std(fwd_packet_len_mean)
     # Compute Z-scores
-    z_scores_fwd_packet_length_mean = (fwd_packet_length_mean - mean_fwd_packet_length_mean) / std_dev_fwd_packet_length_mean
+    z_scores_fwd_packet_length_mean = (fwd_packet_len_mean - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
     # Set threshold for anomaly detection
-    traffic_df = traffic_df[np.abs(z_scores_fwd_packet_length_mean) <= threshold_fwd_packet_length_mean]
+    z_scores_outliers_tags = np.abs(z_scores_fwd_packet_length_mean) <= threshold_fwd_packet_length_mean
+    X_train = X_train[z_scores_outliers_tags]
+    # zcore test
+    fwd_packet_len_mean = X_test['Fwd Packet Length Mean']
+    z_scores_fwd_packet_length_mean = (fwd_packet_len_mean - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
+    # Set threshold for anomaly detection
+    X_test = X_test[np.abs(z_scores_fwd_packet_length_mean) <= threshold_fwd_packet_length_mean]
+
     # Fwd Packet Length Std
-    fwd_packet_length_std = traffic_df['Fwd Packet Length Std']
+    fwd_packet_len_std = X_train['Fwd Packet Length Std']
     threshold_fwd_packet_length_std = 3
-    mean_fwd_packet_length_std = np.mean(fwd_packet_length_std)
-    std_dev_fwd_packet_length_std = np.std(fwd_packet_length_std)
+    mean_fwd_packet_len_std = np.mean(fwd_packet_len_std)
+    std_fwd_packet_len_std = np.std(fwd_packet_len_std)
     # compute Z-scores
-    z_scores_fwd_packet_length_std = (fwd_packet_length_std - mean_fwd_packet_length_std) / std_dev_fwd_packet_length_std
+    z_scores_fwd_packet_length_std = (fwd_packet_len_std - mean_fwd_packet_len_std) / std_fwd_packet_len_std
     # Set threshold for anomaly detection
-    traffic_df = traffic_df[np.abs(z_scores_fwd_packet_length_std) <= threshold_fwd_packet_length_std]
+    z_scores_outliers_tags = np.abs(z_scores_fwd_packet_length_std) <= threshold_fwd_packet_length_std
+    X_train = X_train[z_scores_outliers_tags]
+    # test
+    fwd_packet_len_std = X_test['Fwd Packet Length Std']
+    # compute Z-scores
+    z_scores_fwd_packet_length_std = (fwd_packet_len_std - mean_fwd_packet_len_std) / std_fwd_packet_len_std
+    # Set threshold for anomaly detection
+    X_test = X_test[np.abs(z_scores_fwd_packet_length_std) <= threshold_fwd_packet_length_std]
 
     # anomaly detection using KMeans
     # apply normalization
-    bwd_packet_length_distribution = traffic_df[['Bwd Packet Length Mean', 'Bwd Packet Length Std']]
+    bwd_packet_len_columns = ['Bwd Packet Length Mean', 'Bwd Packet Length Std']
+    bwd_packet_length_distribution = X_train[bwd_packet_len_columns]
     scaler = MinMaxScaler(feature_range=(0, 1))  # Scaling between [0,1]
-    bwd_packet_length_distribution_scaled = scaler.fit_transform(bwd_packet_length_distribution)
+    scaler.fit(bwd_packet_length_distribution)
+    train_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution)
+    test_bwd_packet_len_dis_scaled = scaler.transform(X_test[bwd_packet_len_columns])
     # Apply K-Means clustering
     k = 3  # Number of clusters. What is the best number. Elbow?
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    kmeans.fit(bwd_packet_length_distribution_scaled)
-    # Compute distances to the nearest cluster centroid
-    distances = np.linalg.norm(bwd_packet_length_distribution_scaled - kmeans.cluster_centers_[kmeans.labels_], axis=1)
-    # Define threshold. based on the quantiles
+    kmeans.fit(train_bwd_packet_len_dis_scaled)
+    # compute distances to the nearest cluster centroid
+    distances = np.linalg.norm(train_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_], axis=1)
+    # define threshold. based on the quantiles
     threshold = np.percentile(distances, 95)
     # filter by the centroid distance
-    traffic_df = traffic_df[distances <= threshold]
+    X_train = X_train[distances <= threshold]
+    # Compute distances to the nearest cluster centroid
+    #distances = np.linalg.norm(test_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_], axis=1)
+    # filter by the centroid distance
+    #X_test = X_test[distances <= threshold]
 
-
-    #trans = RobustScaler()
-    #traffic_df['Total Fwd Packets'] = trans.fit_transform(traffic_df[['Total Fwd Packets']])
-    #trans = RobustScaler()
-    #traffic_df['Bwd IAT Total Robust'] = trans.fit_transform(traffic_df[['Bwd IAT Total']])
-    pt = PowerTransformer(method='yeo-johnson')
+    print('apply power transformation')
+    # apply power transformation
+    pt_model = PowerTransformer(method='yeo-johnson')
     power_columns = ['Flow Duration', 'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
                      'Bwd Packet Length Std', 'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Total', 'Fwd IAT Mean',
                      'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
-    traffic_df[power_columns] = pt.fit_transform(traffic_df[power_columns])
-
+    pt_model.fit(X_train[power_columns])
+    X_train[power_columns] = pt_model.transform(X_train[power_columns])
+    X_test[power_columns] = pt_model.transform(X_test[power_columns])
 
     # Note: Below the under sampling you can find the
-
+    print('apply categorical transformation')
     # one Hot Encoding
     encoder = OneHotEncoder(sparse_output=False)  # Set sparse=True for a sparse matrix
     # fit and transform data
     # define one hot encoding columns
     one_hot_encoding_columns = ['Source Port', 'Destination Port']
-    #
-    encoded = encoder.fit(traffic_df[one_hot_encoding_columns])
-    encoded_data = encoded.transform(traffic_df[one_hot_encoding_columns])
+    # train encoding
+    encoded = encoder.fit(X_train[one_hot_encoding_columns])
+    encoded_data = encoded.transform(X_train[one_hot_encoding_columns])
     # encoded data
     encoded_data_df = pd.DataFrame(encoded_data, columns=encoded.get_feature_names_out(one_hot_encoding_columns),
-                                   index=traffic_df.index)
+                                   index=X_train.index)
     # Concatenate the original DataFrame with the drivetrain encoded DataFrame
-    traffic_df = pd.concat([traffic_df, encoded_data_df], axis=1)
+    X_train = pd.concat([X_train, encoded_data_df], axis=1)
     # remove categorical columns
-    traffic_df = traffic_df.loc[:, ~traffic_df.columns.isin(one_hot_encoding_columns)]
+    X_train = X_train.loc[:, ~X_train.columns.isin(one_hot_encoding_columns)]
+    # test encoding
+    encoded_data = encoded.transform(X_test[one_hot_encoding_columns])
+    # encoded data
+    encoded_data_df = pd.DataFrame(encoded_data, columns=encoded.get_feature_names_out(one_hot_encoding_columns),
+                                   index=X_test.index)
+    # Concatenate the original DataFrame with the drivetrain encoded DataFrame
+    X_test = pd.concat([X_test, encoded_data_df], axis=1)
+    # remove categorical columns
+    X_test = X_test.loc[:, ~X_test.columns.isin(one_hot_encoding_columns)]
 
-    # Apply Down sampling to solve the unbalanced
-    traffic_df_list = []
-    for valid_traffic_type in valid_traffic_types:
-        # filter by type and sample
-        traffic_type_df = traffic_df.loc[traffic_df['Label'] == valid_traffic_type]
-        # check if there are enough instances to apply sampling
-        if traffic_type_df.shape[0] > n_instances_per_traffic_type:
-            traffic_type_df = traffic_type_df.sample(n_instances_per_traffic_type)
-        # concatenate result
-        traffic_df_list.append(traffic_type_df)
-    # concatenate traffic df
-    traffic_df = pd.concat(traffic_df_list, axis=0)
-
-    # pop label
-    label = traffic_df.pop('Label')
-
-    # Split dataset
-    X_train, X_test, y_train, y_test = train_test_split(traffic_df, label, test_size=test_size, random_state=42)
-
-    # Or you could remove the
+    print('remove outliers')
+    # remove outliers
     iso_forest = IsolationForest(n_estimators=200, contamination='auto', random_state=42)
     # Fit the model
     iso_forest.fit(X_train)
@@ -249,6 +275,25 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     y_test = y_test.loc[X_test.index]
     X_test.drop(columns='outlier', inplace=True)
 
+    y_train = y_train.loc[X_train.index]
+    y_test = y_test.loc[X_test.index]
+    X_train['Label'] = y_train
+    X_train['Label'] = y_test
+
+    print('apply under sampling')
+    # Apply Down sampling to solve the unbalanced
+    x_train_traffic_df_list = []
+    for valid_traffic_type in valid_traffic_types:
+        # filter by type and sample
+        x_train_traffic_type_df = X_train.loc[X_train['Label'] == valid_traffic_type]
+        # check if there are enough instances to apply sampling
+        if x_train_traffic_type_df.shape[0] > n_instances_per_traffic_type:
+            traffic_type_df = x_train_traffic_type_df.sample(n_instances_per_traffic_type)
+        # concatenate result
+        x_train_traffic_df_list.append(x_train_traffic_type_df)
+    # concatenate traffic df
+    X_train = pd.concat(x_train_traffic_df_list, axis=0)
+
     # Save Isolation Forest model
     #iso_filepath = os.path.join(artifacts_folder, PR_OUTLIER_DETECTION_MODEL_NAME)
     #joblib.dump(iso_forest, iso_filepath)
@@ -257,9 +302,10 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     test_traffic_df = X_test.copy()
 
     # Add price columns
-    train_traffic_df['Label'] = y_train
-    test_traffic_df['Label'] = y_test
+    #train_traffic_df['Label'] = y_train
+    #test_traffic_df['Label'] = y_test
 
+    print('save preprocessed data')
     # save preprocessed data
     train_traffic_filepath = 'traffic_preprocessed_train.csv'
     train_traffic_df.to_csv(train_traffic_filepath, index=False)
