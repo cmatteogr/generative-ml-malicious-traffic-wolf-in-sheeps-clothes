@@ -8,7 +8,7 @@ def test_generate_profiling_report():
     title= "Report Profiling"
     report_name = 'traffic_preprocessed_train'
     report_filepath = f"{report_name}.html"
-    data_filepath = f"/home/cesarealice/PycharmProjects/generative-ml-malicious-traffic-wolf-in-sheeps-clothes/test/pipeline/preprocess/{report_name}.csv"
+    data_filepath = f"/home/cesarealice/PycharmProjects/generative-ml-malicious-traffic-wolf-in-sheeps-clothes/pipeline/preprocess/{report_name}.csv"
     type_schema = {'Label': "categorical"}
 
     generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=data_filepath,

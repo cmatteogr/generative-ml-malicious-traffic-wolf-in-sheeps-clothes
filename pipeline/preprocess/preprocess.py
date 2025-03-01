@@ -14,6 +14,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer
 from pipeline.preprocess.preprocess_base import map_port_usage_category
 from sklearn.preprocessing import RobustScaler
 import mlflow
+from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, VALID_PROTOCOL_VALUES
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -26,15 +27,16 @@ import mlflow
 def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traffic_types: List[str],
                   valid_port_range: Tuple, valid_protocol_values: List[str], n_instances_per_traffic_type:int =150000,
                   test_size: float = 0.2) -> str:
-
-    traffic_df = pd.read_csv(traffic_filepath)
-    #
+    # read dataset
+    traffic_df = pd.read_csv(traffic_filepath, low_memory=False)
+    # clean dataset
     print("data cleaning")
     # filter relevant columns
     traffic_df = traffic_df[relevant_column]
     # format the columns names
     traffic_df.rename(columns=lambda x: x.strip(), inplace=True)
 
+    # generate data profiling report
     base_traffic_filepath = 'traffic_preprocessed_base.csv'
     traffic_df.to_csv(base_traffic_filepath, index=False)
 
@@ -261,7 +263,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
 
     print('remove outliers')
     # remove outliers
-    iso_forest = IsolationForest(n_estimators=200, contamination='auto', random_state=42)
+    iso_forest = IsolationForest(n_estimators=200, contamination=0.1, random_state=42)
     # Fit the model
     iso_forest.fit(X_train)
     # Predict anomalies (-1 for outliers and 1 for inliers)
@@ -278,7 +280,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     y_train = y_train.loc[X_train.index]
     y_test = y_test.loc[X_test.index]
     X_train['Label'] = y_train
-    X_train['Label'] = y_test
+    X_test['Label'] = y_test
 
     print('apply under sampling')
     # Apply Down sampling to solve the unbalanced
@@ -288,13 +290,11 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
         x_train_traffic_type_df = X_train.loc[X_train['Label'] == valid_traffic_type]
         # check if there are enough instances to apply sampling
         if x_train_traffic_type_df.shape[0] > n_instances_per_traffic_type:
-            traffic_type_df = x_train_traffic_type_df.sample(n_instances_per_traffic_type)
+            x_train_traffic_type_df = x_train_traffic_type_df.sample(n_instances_per_traffic_type)
         # concatenate result
         x_train_traffic_df_list.append(x_train_traffic_type_df)
     # concatenate traffic df
-    X_train = pd.concat(x_train_traffic_df_list, axis=0)
-
-    train_traffic_df = X_train.copy()
+    train_traffic_df = pd.concat(x_train_traffic_df_list, axis=0)
     test_traffic_df = X_test.copy()
 
     print('save preprocessed data')
@@ -313,3 +313,12 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
 
     # return preprocessed data filepath
     return traffic_filepath
+
+if __name__ == '__main__':
+    base_traffic_filepath = '/home/cesarealice/PycharmProjects/generative-ml-malicious-traffic-wolf-in-sheeps-clothes/data/Weekly-WorkingHours_report.csv'
+
+    base_traffic_cleaned_filepath = preprocessing(base_traffic_filepath, relevant_column=RELEVANT_COLUMNS,
+                                                  valid_traffic_types=VALID_TRAFFIC_TYPES,
+                                                  valid_port_range=VALID_PORT_RANGE,
+                                                  valid_protocol_values=VALID_PROTOCOL_VALUES)
+    print(base_traffic_cleaned_filepath)
