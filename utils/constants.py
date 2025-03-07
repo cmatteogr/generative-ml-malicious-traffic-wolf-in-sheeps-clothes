@@ -15,7 +15,7 @@ VALID_PROTOCOL_VALUES  = [6, 17] # 6 = TCP, 17 = UDP
 RELEVANT_COLUMNS = [
     ' Source Port',
     ' Destination Port',
-    ' Protocol', # Non informative after filter by valid values
+    # ' Protocol', # Non informative after filter by valid values
     ' Flow Duration',
 
     ' Total Fwd Packets',

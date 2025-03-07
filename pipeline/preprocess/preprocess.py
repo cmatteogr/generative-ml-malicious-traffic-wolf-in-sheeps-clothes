@@ -12,7 +12,7 @@ from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer
 from pipeline.preprocess.preprocess_base import map_port_usage_category
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import LabelEncoder
 import mlflow
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, VALID_PROTOCOL_VALUES
 
@@ -37,8 +37,8 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     traffic_df.rename(columns=lambda x: x.strip(), inplace=True)
 
     # generate data profiling report
-    base_traffic_filepath = 'traffic_preprocessed_base.csv'
-    traffic_df.to_csv(base_traffic_filepath, index=False)
+    #base_traffic_filepath = 'traffic_preprocessed_base.csv'
+    #traffic_df.to_csv(base_traffic_filepath, index=False)
 
     print('filter by valid data ranges')
     # filter instances with invalid values
@@ -227,7 +227,8 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     print('apply power transformation')
     # apply power transformation
     pt_model = PowerTransformer(method='yeo-johnson')
-    power_columns = ['Flow Duration', 'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
+    power_columns = ['Total Length of Fwd Packets', 'Total Length of Bwd Packets',
+                     'Flow Duration', 'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
                      'Bwd Packet Length Std', 'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Total', 'Fwd IAT Mean',
                      'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
     pt_model.fit(X_train[power_columns])
@@ -277,6 +278,13 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     y_test = y_test.loc[X_test.index]
     X_test.drop(columns='outlier', inplace=True)
 
+    # transform labels using label encoder
+    le = LabelEncoder()
+    le.fit(y_train)
+    y_train = pd.Series(le.transform(y_train), index=y_train.index)
+    y_test = pd.Series(le.transform(y_test), index=y_test.index)
+
+    # merge features and labels in single dataframe
     y_train = y_train.loc[X_train.index]
     y_test = y_test.loc[X_test.index]
     X_train['Label'] = y_train
