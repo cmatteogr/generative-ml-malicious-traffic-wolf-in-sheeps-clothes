@@ -1,5 +1,5 @@
 """
-
+Evaluation step
 """
 
 import xgboost as xgb
@@ -7,6 +7,11 @@ import pandas as pd
 from sklearn.metrics import f1_score
 
 def evaluation(model_filepath: str, data_test_filepath: str):
+    """
+    evaluate classifier on test data
+    :param model_filepath: model filepath
+    :param data_test_filepath: test data filepath
+    """
     traffic_df = pd.read_csv(data_test_filepath)
 
     # get features and label

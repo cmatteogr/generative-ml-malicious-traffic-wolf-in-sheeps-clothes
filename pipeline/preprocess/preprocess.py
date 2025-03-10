@@ -4,7 +4,6 @@ Author: Cesar M. Gonzalez
 Preprocess
 """
 from typing import List, Tuple
-
 from sklearn.ensemble import IsolationForest
 import numpy as np
 import pandas as pd
@@ -14,7 +13,6 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer
 from pipeline.preprocess.preprocess_base import map_port_usage_category
 from sklearn.preprocessing import LabelEncoder
 import mlflow
-from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, VALID_PROTOCOL_VALUES
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -25,8 +23,18 @@ from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RA
 # https://www.youtube.com/watch?v=SzZ6GpcfoQY
 
 def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traffic_types: List[str],
-                  valid_port_range: Tuple, valid_protocol_values: List[str], n_instances_per_traffic_type:int =150000,
+                  valid_port_range: Tuple, n_instances_per_traffic_type:int =150000,
                   test_size: float = 0.2) -> str:
+    """
+    Preprocess traffic data
+    :param traffic_filepath: traffic data file path
+    :param relevant_column: relevant column name list
+    :param valid_traffic_types: valid traffic types list
+    :param valid_port_range: valid port range
+    :param n_instances_per_traffic_type: number of instances per traffic type
+    :param test_size: test size
+    :return: preprocessed traffic data file path
+    """
     # read dataset
     traffic_df = pd.read_csv(traffic_filepath, low_memory=False)
     # clean dataset
@@ -35,10 +43,6 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     traffic_df = traffic_df[relevant_column]
     # format the columns names
     traffic_df.rename(columns=lambda x: x.strip(), inplace=True)
-
-    # generate data profiling report
-    #base_traffic_filepath = 'traffic_preprocessed_base.csv'
-    #traffic_df.to_csv(base_traffic_filepath, index=False)
 
     print('filter by valid data ranges')
     # filter instances with invalid values
@@ -131,32 +135,6 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     X_test['Source Port'] = X_test['Source Port'].map(map_port_usage_category)
     X_test['Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
 
-    """print('handle data skewness')
-    # compute the threshold quantile
-    total_fwd_packets_q_threshold = X_train['Total Fwd Packets'].quantile(0.95)
-    # filter rows where 'Total Fwd Packets' is less than or equal to the threshold quantile
-    X_train = X_train[X_train['Total Fwd Packets'] <= total_fwd_packets_q_threshold]
-    X_test = X_test[X_test['Total Fwd Packets'] <= total_fwd_packets_q_threshold]
-    print(f'traffic df shape: {X_train.shape}')
-
-    # compute the threshold quantile
-    total_backward_packets_q_threshold = X_train['Total Backward Packets'].quantile(0.95)
-    # filter rows where 'Total Backward Packets' is less than or equal to the threshold quantile
-    X_train = X_train[X_train['Total Backward Packets'] <= total_backward_packets_q_threshold]
-    X_test = X_test[X_test['Total Backward Packets'] <= total_backward_packets_q_threshold]
-
-    # compute the threshold quantile
-    total_length_fwd_packets_q_threshold = X_train['Total Length of Fwd Packets'].quantile(0.95)
-    # filter rows where 'Total Length of Fwd Packets' is less than or equal to the threshold quantile
-    X_train = X_train[X_train['Total Length of Fwd Packets'] <= total_length_fwd_packets_q_threshold]
-    X_test = X_test[X_test['Total Length of Fwd Packets'] <= total_length_fwd_packets_q_threshold]
-
-    # compute the threshold quantile
-    total_length_bwd_packets_q_threshold = X_train['Total Length of Bwd Packets'].quantile(0.95)
-    # filter rows where 'Total Length of Bwd Packets' is less than or equal to the threshold quantile
-    X_train = X_train[X_train['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
-    X_test = X_test[X_test['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
-"""
     # Apply anomaly detection model to clean the distribution features. It includes features with mean and standard deviation
     # NOTE: Several methods could be applied like, z-score, quantiles, DBSCAN, isolation forest, KMeans, etc.
     # Z-score: https://vitalflux.com/outlier-detection-techniques-in-python/
@@ -321,12 +299,3 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
 
     # return preprocessed data filepath
     return traffic_filepath
-
-if __name__ == '__main__':
-    base_traffic_filepath = '/home/cesarealice/PycharmProjects/generative-ml-malicious-traffic-wolf-in-sheeps-clothes/data/Weekly-WorkingHours_report.csv'
-
-    base_traffic_cleaned_filepath = preprocessing(base_traffic_filepath, relevant_column=RELEVANT_COLUMNS,
-                                                  valid_traffic_types=VALID_TRAFFIC_TYPES,
-                                                  valid_port_range=VALID_PORT_RANGE,
-                                                  valid_protocol_values=VALID_PROTOCOL_VALUES)
-    print(base_traffic_cleaned_filepath)

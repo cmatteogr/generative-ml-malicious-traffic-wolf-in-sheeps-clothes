@@ -1,3 +1,7 @@
+"""
+train traffic classifier
+"""
+
 import numpy as np
 from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier
@@ -6,12 +10,18 @@ import mlflow
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 import pandas as pd
+import os
 
-from utils.plots import generate_confusion_matrix
+from utils.constants import TRAFFIC_CLASSIFICATION_MODEL_FILENAME
+from utils.plots import generate_confusion_matrix_plot
 
 
-def train(data_train_filepath, model_filepath):
-
+def train(data_train_filepath, results_folder_path):
+    """
+    Train traffic classification model
+    :param data_train_filepath: data file path
+    :param results_folder_path: results folder path
+    """
     traffic_df = pd.read_csv(data_train_filepath)
 
     # get features and label
@@ -54,10 +64,16 @@ def train(data_train_filepath, model_filepath):
     mlflow.log_metric('f1_macro', f1_macro)
     mlflow.log_metric('f1_weighted', f1_macro)
 
-    # save model
-    best_model.save_model(model_filepath)
-
     # generate confusion matrix
-    generate_confusion_matrix(y_train, y_pred, "confusion_matrix.png")
+    confusion_matrix_plot_filepath = os.path.join(results_folder_path, "confusion_matrix_train.png")
+    generate_confusion_matrix_plot(y_train, y_pred, confusion_matrix_plot_filepath)
+    # confusion matrix as artifact
+    mlflow.log_artifact(confusion_matrix_plot_filepath)
+
+    # save model
+    model_filepath = os.path.join(results_folder_path, TRAFFIC_CLASSIFICATION_MODEL_FILENAME)
+    best_model.save_model(model_filepath)
+    # log model as artifact
+    mlflow.log_artifact(model_filepath)
 
 

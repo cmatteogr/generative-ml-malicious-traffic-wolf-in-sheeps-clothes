@@ -1,3 +1,6 @@
+"""
+Test case train
+"""
 from pipeline.train.train_traffic_classifier import train
 
 

@@ -1,4 +1,6 @@
-
+"""
+constants
+"""
 VALID_TRAFFIC_TYPES = [
     'BENIGN',
     'DoS Hulk',
@@ -15,7 +17,7 @@ VALID_PROTOCOL_VALUES  = [6, 17] # 6 = TCP, 17 = UDP
 RELEVANT_COLUMNS = [
     ' Source Port',
     ' Destination Port',
-    # ' Protocol', # Non informative after filter by valid values
+
     ' Flow Duration',
 
     ' Total Fwd Packets',
@@ -24,53 +26,30 @@ RELEVANT_COLUMNS = [
     'Total Length of Fwd Packets',
     ' Total Length of Bwd Packets',
 
-    #' Fwd Packet Length Max',
-    #' Fwd Packet Length Min',
     ' Fwd Packet Length Mean',
     ' Fwd Packet Length Std',
-    #'Bwd Packet Length Max',
-    #' Bwd Packet Length Min',
     ' Bwd Packet Length Mean',
     ' Bwd Packet Length Std',
 
-    #'Flow Bytes/s',
-    #' Flow Packets/s',
-
     ' Flow IAT Mean',
     ' Flow IAT Std',
-    #' Flow IAT Max',
-    #' Flow IAT Min',
 
     'Fwd IAT Total',
     ' Fwd IAT Mean',
     ' Fwd IAT Std',
-    #' Fwd IAT Max',
-    #' Fwd IAT Min',
     'Bwd IAT Total',
     ' Bwd IAT Mean',
     ' Bwd IAT Std',
-    #' Bwd IAT Max',
-    #' Bwd IAT Min',
 
     ' Fwd Header Length',
     ' Bwd Header Length',
 
-    #'Fwd Packets/s',
-    #' Bwd Packets/s',
-    #' Min Packet Length',
-    #' Max Packet Length',
     ' Packet Length Mean',
     ' Packet Length Std',
     ' Packet Length Variance',
 
     ' PSH Flag Count',
     ' ACK Flag Count',
-
-    #' Down/Up Ratio',
-
-    #' Average Packet Size',
-    #' Avg Fwd Segment Size',
-    #' Avg Bwd Segment Size',
 
     'Subflow Fwd Packets',
     ' Subflow Fwd Bytes',
@@ -85,12 +64,12 @@ RELEVANT_COLUMNS = [
 
     'Active Mean',
     ' Active Std',
-    #' Active Max',
-    #' Active Min',
 
     'Idle Mean',
     ' Idle Std',
-    #' Idle Max',
-    #' Idle Min',
+
     ' Label'
 ]
+
+# classification model name
+TRAFFIC_CLASSIFICATION_MODEL_FILENAME: str = 'xgb_server_traffic_classifier.json'

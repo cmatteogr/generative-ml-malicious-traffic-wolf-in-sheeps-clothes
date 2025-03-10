@@ -1,7 +1,12 @@
 """
-
+preprocess base operations
 """
 def map_port_usage_category(port: int) -> str:
+    """
+    Maps port usage category
+    :param port: port usage category, Number
+    :return: port usage category, Name
+    """
     # for each port range, define a category
     if port <= 0 or port >= 1023:
         return "well_known"
