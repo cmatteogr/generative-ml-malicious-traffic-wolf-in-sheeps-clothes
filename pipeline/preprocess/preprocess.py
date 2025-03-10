@@ -131,7 +131,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     X_test['Source Port'] = X_test['Source Port'].map(map_port_usage_category)
     X_test['Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
 
-    print('handle data skewness')
+    """print('handle data skewness')
     # compute the threshold quantile
     total_fwd_packets_q_threshold = X_train['Total Fwd Packets'].quantile(0.95)
     # filter rows where 'Total Fwd Packets' is less than or equal to the threshold quantile
@@ -156,7 +156,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     # filter rows where 'Total Length of Bwd Packets' is less than or equal to the threshold quantile
     X_train = X_train[X_train['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
     X_test = X_test[X_test['Total Length of Bwd Packets'] <= total_length_bwd_packets_q_threshold]
-    
+"""
     # Apply anomaly detection model to clean the distribution features. It includes features with mean and standard deviation
     # NOTE: Several methods could be applied like, z-score, quantiles, DBSCAN, isolation forest, KMeans, etc.
     # Z-score: https://vitalflux.com/outlier-detection-techniques-in-python/
@@ -278,12 +278,6 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     y_test = y_test.loc[X_test.index]
     X_test.drop(columns='outlier', inplace=True)
 
-    # transform labels using label encoder
-    le = LabelEncoder()
-    le.fit(y_train)
-    y_train = pd.Series(le.transform(y_train), index=y_train.index)
-    y_test = pd.Series(le.transform(y_test), index=y_test.index)
-
     # merge features and labels in single dataframe
     y_train = y_train.loc[X_train.index]
     y_test = y_test.loc[X_test.index]
@@ -304,6 +298,12 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     # concatenate traffic df
     train_traffic_df = pd.concat(x_train_traffic_df_list, axis=0)
     test_traffic_df = X_test.copy()
+
+    # transform labels using label encoder
+    le = LabelEncoder()
+    le.fit(train_traffic_df['Label'])
+    train_traffic_df['Label'] = pd.Series(le.transform(train_traffic_df['Label']), index=train_traffic_df.index)
+    test_traffic_df['Label'] = pd.Series(le.transform(test_traffic_df['Label']), index=test_traffic_df.index)
 
     print('save preprocessed data')
     # save preprocessed data
