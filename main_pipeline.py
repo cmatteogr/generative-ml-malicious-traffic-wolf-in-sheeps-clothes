@@ -4,7 +4,7 @@ traffic classifier pipeline
 import mlflow
 
 from pipeline.preprocess.preprocess import preprocessing
-from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, VALID_PROTOCOL_VALUES
+from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE
 
 # Set our tracking server uri for logging
 mlflow.set_tracking_uri(uri="http://127.0.0.1:5000")

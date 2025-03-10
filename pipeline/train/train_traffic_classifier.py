@@ -13,15 +13,16 @@ import pandas as pd
 import os
 
 from utils.constants import TRAFFIC_CLASSIFICATION_MODEL_FILENAME
-from utils.plots import generate_confusion_matrix_plot
+from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
 
 
-def train(data_train_filepath, results_folder_path):
+def train(data_train_filepath: str, results_folder_path: str):
     """
     Train traffic classification model
     :param data_train_filepath: data file path
     :param results_folder_path: results folder path
     """
+    # read traffic data
     traffic_df = pd.read_csv(data_train_filepath)
 
     # get features and label
@@ -31,7 +32,7 @@ def train(data_train_filepath, results_folder_path):
     # Define XGBoost model
     xgb_model = XGBClassifier(objective='multi:softprob', num_class=len(np.unique(y_train)), device="cuda",
                               eval_metric='mlogloss', use_label_encoder=False, tree_method="gpu_hist")
-    # Define parameter grid for tuning
+    # define parameter ranges for tuning
     param_grid = {
         'learning_rate': Real(1e-3, 3, prior='log-uniform'),
         'max_depth': Integer(3, 30, prior='uniform'),
@@ -39,7 +40,9 @@ def train(data_train_filepath, results_folder_path):
         'booster': Categorical(['gbtree', 'gblinear', 'dart']),
     }
 
-    # log-uniform: understand as search over p = exp(x) by varying x
+    # set the optimization method applied
+    mlflow.log_param("optimization_method", "BayesSearchCV")
+    # bayesian cv models
     opt = BayesSearchCV(xgb_model, param_grid, n_iter=50, random_state=0, verbose=2)
 
     # executes bayesian optimization
@@ -61,8 +64,8 @@ def train(data_train_filepath, results_folder_path):
     print(f"F1 Weighted: {f1_weighted:.4f}")
 
     # log metric in MLFlow
-    mlflow.log_metric('f1_macro', f1_macro)
-    mlflow.log_metric('f1_weighted', f1_macro)
+    mlflow.log_metric('f1_macro_train', f1_macro)
+    mlflow.log_metric('f1_weighted_train', f1_macro)
 
     # generate confusion matrix
     confusion_matrix_plot_filepath = os.path.join(results_folder_path, "confusion_matrix_train.png")
@@ -76,4 +79,8 @@ def train(data_train_filepath, results_folder_path):
     # log model as artifact
     mlflow.log_artifact(model_filepath)
 
+    # plot model features relevance
+    features_relevance_model_plot = os.path.join(results_folder_path, "features_relevance_model.png")
+    xgboost_plot_features_relevance(model_filepath, features_relevance_model_plot)
+    mlflow.log_artifact(features_relevance_model_plot)
 
