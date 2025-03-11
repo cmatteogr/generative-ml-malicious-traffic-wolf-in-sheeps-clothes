@@ -83,7 +83,8 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
 
     # plot model features relevance
     features_relevance_model_plot = os.path.join(results_folder_path, "features_relevance_model.png")
-    xgboost_plot_features_relevance(model_filepath, features_relevance_model_plot)
+    xgboost_plot_features_relevance(best_model, features_relevance_model_plot)
+    # log plot feature relevance model as artifact
     mlflow.log_artifact(features_relevance_model_plot)
 
     # return model filepath
