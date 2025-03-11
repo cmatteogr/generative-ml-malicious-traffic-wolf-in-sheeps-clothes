@@ -17,6 +17,7 @@ def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path
     :param data_test_filepath: test data filepath
     :param results_folder_path: results folder path
     """
+    print("read test traffic data")
     traffic_df = pd.read_csv(data_test_filepath)
 
     # get features and label
@@ -57,7 +58,7 @@ def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path
     mlflow.log_metric('f1_macro', f1_macro)
     mlflow.log_metric('f1_weighted', f1_macro)
 
-    # TODO: interactive PLOT
+    """# TODO: interactive PLOT
     traffic_df['Label'] = y_test.astype(str)
-    plot_instances_by_features_interactive(traffic_df, feature_a, feature_b, feature_c)
+    plot_instances_by_features_interactive(traffic_df, feature_a, feature_b, feature_c)"""
 

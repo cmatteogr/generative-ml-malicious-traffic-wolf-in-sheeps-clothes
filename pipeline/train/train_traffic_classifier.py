@@ -16,13 +16,14 @@ from utils.constants import TRAFFIC_CLASSIFICATION_MODEL_FILENAME
 from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
 
 
-def train(data_train_filepath: str, results_folder_path: str):
+def train(data_train_filepath: str, results_folder_path: str) -> str:
     """
     Train traffic classification model
     :param data_train_filepath: data file path
     :param results_folder_path: results folder path
     """
     # read traffic data
+    print("read train traffic data")
     traffic_df = pd.read_csv(data_train_filepath)
 
     # get features and label
@@ -31,11 +32,12 @@ def train(data_train_filepath: str, results_folder_path: str):
 
     # Define XGBoost model
     xgb_model = XGBClassifier(objective='multi:softprob', num_class=len(np.unique(y_train)), device="cuda",
-                              eval_metric='mlogloss', use_label_encoder=False, tree_method="gpu_hist")
+                              eval_metric='mlogloss')
     # define parameter ranges for tuning
     param_grid = {
         'learning_rate': Real(1e-3, 3, prior='log-uniform'),
-        'max_depth': Integer(3, 30, prior='uniform'),
+        'max_depth': Integer(3, 30),
+        # NOTE: in run time a warning appears because max_depth applies only to gbtree and dart boosters, as they use decision trees
         'n_estimators': Integer(5, 500, prior='log-uniform'),
         'booster': Categorical(['gbtree', 'gblinear', 'dart']),
     }
@@ -43,7 +45,7 @@ def train(data_train_filepath: str, results_folder_path: str):
     # set the optimization method applied
     mlflow.log_param("optimization_method", "BayesSearchCV")
     # bayesian cv models
-    opt = BayesSearchCV(xgb_model, param_grid, n_iter=50, random_state=0, verbose=2)
+    opt = BayesSearchCV(xgb_model, param_grid, n_iter=50, cv=5, random_state=0, verbose=2)
 
     # executes bayesian optimization
     _ = opt.fit(X_train, y_train)
@@ -83,4 +85,7 @@ def train(data_train_filepath: str, results_folder_path: str):
     features_relevance_model_plot = os.path.join(results_folder_path, "features_relevance_model.png")
     xgboost_plot_features_relevance(model_filepath, features_relevance_model_plot)
     mlflow.log_artifact(features_relevance_model_plot)
+
+    # return model filepath
+    return model_filepath
 

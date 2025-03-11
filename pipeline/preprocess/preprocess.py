@@ -3,6 +3,7 @@ Author: Cesar M. Gonzalez
 
 Preprocess
 """
+import os.path
 from typing import List, Tuple
 from sklearn.ensemble import IsolationForest
 import numpy as np
@@ -22,9 +23,9 @@ import mlflow
 # To learn about standard deviation, mean, variance:
 # https://www.youtube.com/watch?v=SzZ6GpcfoQY
 
-def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traffic_types: List[str],
-                  valid_port_range: Tuple, n_instances_per_traffic_type:int =150000,
-                  test_size: float = 0.2) -> str:
+def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_column: List[str],
+                  valid_traffic_types: List[str], valid_port_range: Tuple, n_instances_per_traffic_type:int =150000,
+                  test_size: float = 0.2) -> Tuple[str, str]:
     """
     Preprocess traffic data
     :param traffic_filepath: traffic data file path
@@ -36,6 +37,7 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     :return: preprocessed traffic data file path
     """
     # read dataset
+    print("read traffic data")
     traffic_df = pd.read_csv(traffic_filepath, low_memory=False)
     # clean dataset
     print("data cleaning")
@@ -285,9 +287,9 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
 
     print('save preprocessed data')
     # save preprocessed data
-    train_traffic_filepath = 'traffic_preprocessed_train.csv'
+    train_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_train.csv')
     train_traffic_df.to_csv(train_traffic_filepath, index=False)
-    test_traffic_filepath = 'traffic_preprocessed_test.csv'
+    test_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_test.csv')
     test_traffic_df.to_csv(test_traffic_filepath, index=False)
 
     # Log the hyperparameters
@@ -298,4 +300,4 @@ def preprocessing(traffic_filepath: str, relevant_column: List[str], valid_traff
     mlflow.log_params(params)
 
     # return preprocessed data filepath
-    return traffic_filepath
+    return train_traffic_filepath, test_traffic_filepath
