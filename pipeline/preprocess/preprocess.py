@@ -284,6 +284,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     le.fit(train_traffic_df['Label'])
     train_traffic_df['Label'] = pd.Series(le.transform(train_traffic_df['Label']), index=train_traffic_df.index)
     test_traffic_df['Label'] = pd.Series(le.transform(test_traffic_df['Label']), index=test_traffic_df.index)
+    # get encoding mapping
+    label_encoding_mapping = {label: idx for idx, label in enumerate(le.classes_)}
 
     print('save preprocessed data')
     # save preprocessed data
@@ -295,7 +297,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # Log the hyperparameters
     params = {
         "relvant_columns": relevant_column,
-        "valid_traffic": valid_traffic_types
+        "valid_traffic": valid_traffic_types,
+        "label_encoding_mapping": label_encoding_mapping
     }
     mlflow.log_params(params)
 

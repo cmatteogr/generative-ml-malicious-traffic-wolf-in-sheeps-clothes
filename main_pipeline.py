@@ -32,3 +32,4 @@ with mlflow.start_run():
 
     # evaluate model
     evaluation(model_filepath, test_traffic_filepath, results_folder_path)
+
