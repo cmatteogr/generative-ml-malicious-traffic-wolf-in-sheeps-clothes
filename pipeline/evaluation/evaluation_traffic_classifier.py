@@ -10,7 +10,7 @@ from utils.plots import generate_confusion_matrix_plot, plot_instances_by_featur
     plot_instances_by_features_interactive
 
 
-def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path: str):
+def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path: str) -> dict:
     """
     evaluate classifier on test data
     :param model_filepath: model filepath
@@ -61,4 +61,11 @@ def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path
     """# TODO: interactive PLOT
     traffic_df['Label'] = y_test.astype(str)
     plot_instances_by_features_interactive(traffic_df, feature_a, feature_b, feature_c)"""
+    # return metric
+    eval_data = {
+        'f1_macro': f1_macro,
+        'f1_weighted': f1_weighted,
+    }
+
+    return eval_data
 

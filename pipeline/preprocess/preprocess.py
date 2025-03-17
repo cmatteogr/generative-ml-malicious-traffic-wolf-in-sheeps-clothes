@@ -10,10 +10,13 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer
-from pipeline.preprocess.preprocess_base import map_port_usage_category
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer, power_transform
+from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features
 from sklearn.preprocessing import LabelEncoder
 import mlflow
+import joblib
+
+from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -25,10 +28,11 @@ import mlflow
 
 def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_column: List[str],
                   valid_traffic_types: List[str], valid_port_range: Tuple, n_instances_per_traffic_type:int =150000,
-                  test_size: float = 0.2) -> Tuple[str, str]:
+                  test_size: float = 0.2) -> Tuple[str, str, dict]:
     """
     Preprocess traffic data
     :param traffic_filepath: traffic data file path
+    :param results_folder_path: results folder path
     :param relevant_column: relevant column name list
     :param valid_traffic_types: valid traffic types list
     :param valid_port_range: valid port range
@@ -50,79 +54,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # filter instances with invalid values
     min_port, max_port = valid_port_range
 
-    valid_mask = (
-        # filter by valid port, source and destination
-        traffic_df['Source Port'].between(min_port, max_port, inclusive='both') &
-        traffic_df['Destination Port'].between(min_port, max_port, inclusive='both') &
-
-        # filter by valid protocols
-        #traffic_df['Protocol'].isin(valid_protocol_values) &
-
-        # Flow Duration >= 0
-        (traffic_df['Flow Duration'] >= 0) &
-
-        # Packet counts >= 0
-        (traffic_df['Total Fwd Packets'] >= 0) &
-        (traffic_df['Total Backward Packets'] >= 0) &
-
-        # Total Length of Fwd/Bwd Packets >= 0
-        (traffic_df['Total Length of Fwd Packets'] >= 0) &
-        (traffic_df['Total Length of Bwd Packets'] >= 0) &
-
-        # Forward/Backward Packet Length stats >= 0
-        (traffic_df['Fwd Packet Length Mean'] >= 0) &
-        (traffic_df['Fwd Packet Length Std'] >= 0) &
-        (traffic_df['Bwd Packet Length Mean'] >= 0) &
-        (traffic_df['Bwd Packet Length Std'] >= 0) &
-
-        # Flow IAT and Fwd/Bwd IAT stats >= 0
-        (traffic_df['Flow IAT Mean'] >= 0) &
-        (traffic_df['Flow IAT Std'] >= 0) &
-        (traffic_df['Fwd IAT Total'] >= 0) &
-        (traffic_df['Fwd IAT Mean'] >= 0) &
-        (traffic_df['Fwd IAT Std'] >= 0) &
-        (traffic_df['Bwd IAT Total'] >= 0) &
-        (traffic_df['Bwd IAT Mean'] >= 0) &
-        (traffic_df['Bwd IAT Std'] >= 0) &
-
-        # Header lengths >= 0
-        (traffic_df['Fwd Header Length'] >= 0) &
-        (traffic_df['Bwd Header Length'] >= 0) &
-
-        # Min/Max Packet Length >= 0, plus means/stdev/variance
-        (traffic_df['Packet Length Mean'] >= 0) &
-        (traffic_df['Packet Length Std'] >= 0) &
-        (traffic_df['Packet Length Variance'] >= 0) &
-
-        # Flag counts >= 0
-        (traffic_df['PSH Flag Count'] >= 0) &
-        (traffic_df['ACK Flag Count'] >= 0) &
-
-        # Subflows >= 0
-        (traffic_df['Subflow Fwd Packets'] >= 0) &
-        (traffic_df['Subflow Fwd Bytes'] >= 0) &
-        (traffic_df['Subflow Bwd Packets'] >= 0) &
-        (traffic_df['Subflow Bwd Bytes'] >= 0) &
-
-        # TCP initial windows >= 0
-        (traffic_df['Init_Win_bytes_forward'] >= 0) &
-        (traffic_df['Init_Win_bytes_backward'] >= 0) &
-
-        # Active data pkts and min seg size >= 0
-        (traffic_df['act_data_pkt_fwd'] >= 0) &
-        (traffic_df['min_seg_size_forward'] >= 0) &
-
-        # Active and Idle stats >= 0
-        (traffic_df['Active Mean'] >= 0) &
-        (traffic_df['Active Std'] >= 0) &
-        (traffic_df['Idle Mean'] >= 0) &
-        (traffic_df['Idle Std'] >= 0) &
-
-        # filter traffic types
-        traffic_df['Label'].isin(valid_traffic_types)
-    )
     # apply filter valid values rules
-    traffic_df = traffic_df[valid_mask].copy()
+    traffic_df = filter_valid_traffic_features(traffic_df, min_port, max_port, valid_traffic_types)
     print(f'traffic df shape: {traffic_df.shape}')
 
     # pop label
@@ -214,16 +147,19 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     pt_model.fit(X_train[power_columns])
     X_train[power_columns] = pt_model.transform(X_train[power_columns])
     X_test[power_columns] = pt_model.transform(X_test[power_columns])
+    # save power transformer
+    power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
+    joblib.dump(pt_model, power_transformer_filepath)
 
     # Note: Below the under sampling you can find the
     print('apply categorical transformation')
     # one Hot Encoding
-    encoder = OneHotEncoder(sparse_output=False)  # Set sparse=True for a sparse matrix
+    onehot_encoder = OneHotEncoder(sparse_output=False)  # Set sparse=True for a sparse matrix
     # fit and transform data
     # define one hot encoding columns
     one_hot_encoding_columns = ['Source Port', 'Destination Port']
     # train encoding
-    encoded = encoder.fit(X_train[one_hot_encoding_columns])
+    encoded = onehot_encoder.fit(X_train[one_hot_encoding_columns])
     encoded_data = encoded.transform(X_train[one_hot_encoding_columns])
     # encoded data
     encoded_data_df = pd.DataFrame(encoded_data, columns=encoded.get_feature_names_out(one_hot_encoding_columns),
@@ -241,6 +177,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     X_test = pd.concat([X_test, encoded_data_df], axis=1)
     # remove categorical columns
     X_test = X_test.loc[:, ~X_test.columns.isin(one_hot_encoding_columns)]
+    # save one hot encoder transformer
+    onehot_encoder_filepath = os.path.join(results_folder_path, ONEHOT_ENCODER_NAME)
+    joblib.dump(onehot_encoder, onehot_encoder_filepath)
 
     print('remove outliers')
     # remove outliers
@@ -263,6 +202,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     y_test = y_test.loc[X_test.index]
     X_train['Label'] = y_train
     X_test['Label'] = y_test
+    # save iso forest model
+    iso_forest_model_filepath = os.path.join(results_folder_path, ISO_FOREST_MODEL_NAME)
+    joblib.dump(iso_forest, iso_forest_model_filepath)
 
     print('apply under sampling')
     # Apply Down sampling to solve the unbalanced
@@ -286,6 +228,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     test_traffic_df['Label'] = pd.Series(le.transform(test_traffic_df['Label']), index=test_traffic_df.index)
     # get encoding mapping
     label_encoding_mapping = {label: idx for idx, label in enumerate(le.classes_)}
+    # save Label encoder
+    label_encoder_filepath = os.path.join(results_folder_path, LABEL_ENCODER_NAME)
+    joblib.dump(le, label_encoder_filepath)
 
     print('save preprocessed data')
     # save preprocessed data
@@ -302,5 +247,13 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     }
     mlflow.log_params(params)
 
+    # get preprocess artifacts
+    preprocess_artifacts = {
+        "power_transformer": power_transformer_filepath,
+        "onehot_encoder": onehot_encoder_filepath,
+        "iso_forest_model": iso_forest_model_filepath,
+        "label_encoder": label_encoder_filepath
+    }
+
     # return preprocessed data filepath
-    return train_traffic_filepath, test_traffic_filepath
+    return train_traffic_filepath, test_traffic_filepath, preprocess_artifacts
