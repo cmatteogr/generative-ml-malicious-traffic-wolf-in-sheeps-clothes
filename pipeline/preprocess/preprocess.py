@@ -243,7 +243,10 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     params = {
         "relvant_columns": relevant_column,
         "valid_traffic": valid_traffic_types,
-        "label_encoding_mapping": label_encoding_mapping
+        "label_encoding_mapping": label_encoding_mapping,
+        "min_port": min_port,
+        "max_port": max_port,
+        "power_columns": power_columns
     }
     mlflow.log_params(params)
 
@@ -252,7 +255,12 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "power_transformer": power_transformer_filepath,
         "onehot_encoder": onehot_encoder_filepath,
         "iso_forest_model": iso_forest_model_filepath,
-        "label_encoder": label_encoder_filepath
+        "label_encoder": label_encoder_filepath,
+        "min_port": min_port,
+        "max_port": max_port,
+        "power_columns": power_columns,
+        "valid_traffic": valid_traffic_types,
+        "relvant_columns": relevant_column
     }
 
     # return preprocessed data filepath

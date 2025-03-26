@@ -26,7 +26,7 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
         self.loaded_model.load_model(context.artifacts["model"])
 
     def predict(self, context, input_data):
-        traffic_df = input_data['traffic_df'].values()
+        traffic_df = input_data['traffic_df']
 
         min_port = context.artifacts["min_port"]
         max_port = context.artifacts["max_port"]
