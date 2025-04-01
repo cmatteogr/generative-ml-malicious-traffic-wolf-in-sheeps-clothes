@@ -7,6 +7,7 @@ from sklearn.ensemble import IsolationForest
 import pipeline.preprocess.preprocess_base as pre_base
 from sklearn.preprocessing import PowerTransformer, OneHotEncoder, LabelEncoder
 import xgboost as xgb
+import json
 
 
 class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
@@ -14,7 +15,9 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
         # load register_models
         # Load preprocess params data
-
+        with open(context.artifacts["preprocess_params"]) as file:
+             preprocess_params_str = file.read()
+        self.preprocess_params = json.loads(preprocess_params_str)
         # Load Outlier detection model
         self.outliers_detection_model: IsolationForest = joblib.load(context.artifacts["iso_forest_model"])
         # Load Power transformer
@@ -30,9 +33,9 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
     def predict(self, context, input_data):
         traffic_df = input_data['traffic_df']
 
-        min_port = context.artifacts["min_port"]
-        max_port = context.artifacts["max_port"]
-        valid_traffic_types = context.artifacts["valid_traffic_types"]
+        min_port = self.preprocess_params["min_port"]
+        max_port = self.preprocess_params["max_port"]
+        valid_traffic_types = self.preprocess_params["valid_traffic_types"]
 
         # apply filter valid values rules
         traffic_filtered_df = pre_base.filter_valid_traffic_features(traffic_df, min_port, max_port, valid_traffic_types)
