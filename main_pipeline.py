@@ -73,6 +73,7 @@ with mlflow.start_run() as run:
                    "utils"]
     )
 
+
     model_artifact_path = os.path.join('results', 'malicious_traffic_classifier_model')
     # remove folder if exist
     if os.path.exists(model_artifact_path):
