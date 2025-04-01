@@ -1,11 +1,8 @@
-from datetime import datetime, timedelta
-
 import mlflow
-import pytest
 
 import pandas as pd
 
-def test_inference_price_regression_model(input_model):
+def test_inference_price_regression_model():
     # define the model filepath
     model_artifact_path = f"/home/cesarealice/PycharmProjects/generative-ml-malicious-traffic-wolf-in-sheeps-clothes/results/malicious_traffic_classifier_model"
     # load model

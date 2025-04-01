@@ -15,10 +15,10 @@ from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RA
 mlflow.set_tracking_uri(uri="http://127.0.0.1:5000")
 
 # Create a new MLFlow Experiment
-mlflow.set_experiment("gen_ml_malicious")
+mlflow.set_experiment("generative_ml_malicious")
 
 # model deployed name
-model_deployed_name = 'gen_ml_malicious_traffic'
+model_deployed_name = 'generative_ml_malicious_traffic'
 eval_metric = 'f1_macro'
 
 # Start an MLFlow run

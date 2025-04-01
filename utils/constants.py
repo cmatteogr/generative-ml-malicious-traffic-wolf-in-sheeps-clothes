@@ -79,6 +79,7 @@ POWER_TRANSFORMER_NAME = 'power_transformer.pkl'
 ONEHOT_ENCODER_NAME = 'onehot_encoder.pkl'
 ISO_FOREST_MODEL_NAME = 'iso_forest_model.pkl'
 LABEL_ENCODER_NAME = 'label_encoder.pkl'
+PREPROCESS_PARAMS_NAME = 'preprocess_params.json'
 
 # MLFlow constants
 MLFLOW_HOST='127.0.0.1'

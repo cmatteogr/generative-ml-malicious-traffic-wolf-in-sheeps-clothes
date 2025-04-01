@@ -13,6 +13,8 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
         # load register_models
+        # Load preprocess params data
+
         # Load Outlier detection model
         self.outliers_detection_model: IsolationForest = joblib.load(context.artifacts["iso_forest_model"])
         # Load Power transformer

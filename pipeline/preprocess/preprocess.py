@@ -3,6 +3,7 @@ Author: Cesar M. Gonzalez
 
 Preprocess
 """
+import json
 import os.path
 from typing import List, Tuple
 from sklearn.ensemble import IsolationForest
@@ -16,7 +17,8 @@ from sklearn.preprocessing import LabelEncoder
 import mlflow
 import joblib
 
-from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME
+from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME, \
+    PREPROCESS_PARAMS_NAME
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -249,6 +251,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "power_columns": power_columns
     }
     mlflow.log_params(params)
+    preprocess_params_filepath = os.path.join(results_folder_path, PREPROCESS_PARAMS_NAME)
+    with open(preprocess_params_filepath, 'w') as f:
+        json.dump(params, f, indent=4)
 
     # get preprocess artifacts
     preprocess_artifacts = {
@@ -256,11 +261,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "onehot_encoder": onehot_encoder_filepath,
         "iso_forest_model": iso_forest_model_filepath,
         "label_encoder": label_encoder_filepath,
-        "min_port": min_port,
-        "max_port": max_port,
-        "power_columns": power_columns,
-        "valid_traffic": valid_traffic_types,
-        "relvant_columns": relevant_column
+        "preprocess_params": preprocess_params_filepath
     }
 
     # return preprocessed data filepath
