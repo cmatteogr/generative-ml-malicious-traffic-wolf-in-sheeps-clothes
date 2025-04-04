@@ -248,7 +248,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "label_encoding_mapping": label_encoding_mapping,
         "min_port": min_port,
         "max_port": max_port,
-        "power_columns": power_columns
+        "power_columns": power_columns,
+        "one_hot_encoding_columns": one_hot_encoding_columns,
     }
     mlflow.log_params(params)
     preprocess_params_filepath = os.path.join(results_folder_path, PREPROCESS_PARAMS_NAME)

@@ -35,7 +35,11 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
 
         min_port = self.preprocess_params["min_port"]
         max_port = self.preprocess_params["max_port"]
-        valid_traffic_types = self.preprocess_params["valid_traffic_types"]
+        valid_traffic_types = self.preprocess_params["valid_traffic"]
+        relvant_columns = self.preprocess_params["relvant_columns"]
+
+        # filter relevant columns
+        traffic_df = traffic_df[relvant_columns]
 
         # apply filter valid values rules
         traffic_filtered_df = pre_base.filter_valid_traffic_features(traffic_df, min_port, max_port, valid_traffic_types)
@@ -47,7 +51,7 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
         traffic_df['Destination Port'] = traffic_df['Destination Port'].map(pre_base.map_port_usage_category)
 
         # apply power transformation
-        power_columns = context.artifacts["power_columns"]
+        power_columns = self.preprocess_params["power_columns"]
         traffic_df[power_columns] = self.power_transformer.transform(traffic_df[power_columns])
 
         # identify outliers
