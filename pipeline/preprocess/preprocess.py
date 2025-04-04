@@ -243,7 +243,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
     # Log the hyperparameters
     params = {
-        "relvant_columns": relevant_column,
+        "relevant_columns": relevant_column,
         "valid_traffic": valid_traffic_types,
         "label_encoding_mapping": label_encoding_mapping,
         "min_port": min_port,
