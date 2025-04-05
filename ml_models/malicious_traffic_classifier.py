@@ -8,6 +8,7 @@ import pipeline.preprocess.preprocess_base as pre_base
 from sklearn.preprocessing import PowerTransformer, OneHotEncoder, LabelEncoder
 import xgboost as xgb
 import json
+import pandas as pd
 
 
 class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
@@ -38,13 +39,21 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
         valid_traffic_types = self.preprocess_params["valid_traffic"]
         relevant_columns = self.preprocess_params["relevant_columns"]
 
+        # NOTE: This columns is added to reuse the function filter_valid_traffic_features
+        # This logic could be improved
+        traffic_df['Label'] = 'BENIGN'
+
         # filter relevant columns
+        relevant_columns = list(map(lambda x: x.strip(), relevant_columns))
         traffic_df = traffic_df[relevant_columns]
 
         # apply filter valid values rules
         traffic_filtered_df = pre_base.filter_valid_traffic_features(traffic_df, min_port, max_port, valid_traffic_types)
         if traffic_filtered_df.shape[0] < traffic_df.shape[0]:
             print("WARNING", "some traffic instances contains invalid data!")
+
+        # Remove Label
+        traffic_df.pop('Label')
 
         # apply destination and source ports Well-Known Port Ranges for Standardized Functionalities transformations
         traffic_df['Source Port'] = traffic_df['Source Port'].map(pre_base.map_port_usage_category)
@@ -54,12 +63,25 @@ class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
         power_columns = self.preprocess_params["power_columns"]
         traffic_df[power_columns] = self.power_transformer.transform(traffic_df[power_columns])
 
+        # Encode columns
+        one_hot_encoding_columns = self.preprocess_params["one_hot_encoding_columns"]
+        encoded_data = self.onehot_encoder.transform(traffic_df[one_hot_encoding_columns])
+        # encoded data
+        encoded_data_df = pd.DataFrame(encoded_data,
+                                       columns=self.onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
+                                       index=traffic_df.index)
+        # Concatenate the original DataFrame with the drivetrain encoded DataFrame
+        traffic_df = pd.concat([traffic_df, encoded_data_df], axis=1)
+        # remove categorical columns
+        traffic_df = traffic_df.loc[:, ~traffic_df.columns.isin(one_hot_encoding_columns)]
+
         # identify outliers
         # Predict anomalies (-1 for outliers and 1 for inliers)
         traffic_df['outlier'] = self.outliers_detection_model.predict(traffic_df)
         # check if there is any outlier
         if traffic_df.loc[traffic_df['outlier'] == 1].shape[0] > 0:
             print("WARNING", "traffic instance contains outliers!")
+        traffic_df.pop('outlier')
 
         # predict traffic
         y_pred = self.loaded_model.predict(traffic_df)
