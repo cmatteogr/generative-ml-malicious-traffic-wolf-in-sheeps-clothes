@@ -10,7 +10,6 @@ import xgboost as xgb
 import json
 import pandas as pd
 
-
 class MaliciousTrafficClassifierModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
