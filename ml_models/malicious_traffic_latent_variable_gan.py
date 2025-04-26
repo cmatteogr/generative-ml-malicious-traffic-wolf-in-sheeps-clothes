@@ -234,8 +234,8 @@ num_epochs = 100 # max. number of epochs
 encoder_net = nn.Sequential(
     nn.Linear(D, M),
     nn.ReLU(), # Changed to ReLU, common choice
-    # nn.Linear(M, M), # Optional extra layer
-    # nn.ReLU(),
+    nn.Linear(M, M), # Optional extra layer
+    nn.ReLU(),
     nn.Linear(M, 2 * L) # Output mu and log_var
 )
 
@@ -244,9 +244,9 @@ encoder_net = nn.Sequential(
 decoder_net = nn.Sequential(
     nn.Linear(L, M),
     nn.ReLU(),
-    # nn.Linear(M, M), # Optional extra layer
-    # nn.ReLU(),
-    nn.Linear(M, D)
+    nn.Linear(M, M), # Optional extra layer
+    nn.ReLU(),
+    nn.Linear(M, D),
     # Add Sigmoid here if input data is normalized to [0, 1]
     # nn.Sigmoid()
 )
