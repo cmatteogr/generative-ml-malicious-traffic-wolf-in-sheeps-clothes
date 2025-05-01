@@ -7,7 +7,7 @@ from ml_models.malicious_traffic_classifier import MaliciousTrafficClassifierMod
 from mlflow_api.mlflow_client import MlflowClientHandler
 import mlflow
 from pipeline.evaluation.evaluation_traffic_classifier import evaluation
-from pipeline.preprocess.preprocess import preprocessing
+from pipeline.preprocess.preprocess_discriminator import preprocessing
 from pipeline.train.train_traffic_classifier import train
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE
 

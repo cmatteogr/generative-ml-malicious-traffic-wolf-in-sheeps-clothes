@@ -1,7 +1,7 @@
 """
 Test case preprocess
 """
-from pipeline.preprocess.preprocess import preprocessing
+from pipeline.preprocess.preprocess_discriminator import preprocessing
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE
 
 

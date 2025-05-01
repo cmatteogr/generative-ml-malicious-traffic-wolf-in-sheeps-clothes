@@ -10,16 +10,16 @@ from typing import List, Tuple, Dict # Added Dict for type hint
 from sklearn.ensemble import IsolationForest
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, PowerTransformer # Removed unused power_transform
+from sklearn.preprocessing import OneHotEncoder, PowerTransformer # Removed unused power_transform
 from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features
-from sklearn.preprocessing import LabelEncoder
 import mlflow
 import joblib
 
 from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME, \
-    PREPROCESS_PARAMS_NAME
+    PREPROCESS_PARAMS_NAME, SCALER_NAME
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -34,7 +34,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
                   n_instances_per_traffic_type: int = 150000,
                   test_size: float = 0.2) -> Tuple[str, str, Dict[str, str]]:
     """
-    Performs preprocessing on raw network traffic data.
+    Performs preprocessing on raw network traffic data for the Generator model
 
     Steps include:
     1. Reading and initial cleaning (column selection, renaming).
@@ -44,10 +44,10 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     5. Outlier detection and removal using Z-score, KMeans (commented out test part), and Isolation Forest.
     6. Feature transformation: Power transformation (Yeo-Johnson) for numerical features.
     7. Feature encoding: One-Hot Encoding for categorical port features.
-    8. Label encoding for the target variable.
     9. Undersampling the training data to balance classes.
-    10. Saving preprocessed data and transformation artifacts (scalers, encoders, models).
-    11. Logging parameters and artifacts to MLflow.
+    10. Apply normalization using MinMaxScaler.
+    11. Saving preprocessed data and transformation artifacts (scalers, encoders, models).
+    12. Logging parameters and artifacts to MLflow.
 
     :param traffic_filepath: Path to the raw input traffic data CSV file.
     :type traffic_filepath: str
@@ -89,13 +89,14 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     if traffic_df.empty:
         raise ValueError("DataFrame is empty after initial filtering. Check filter criteria and input data.")
 
-    # Separate features (X) and target (y)
-    label = traffic_df.pop('Label')
+    # Separate features (X)
+    # NOTE: Label is not needed for the VAE-GAN
+    traffic_df.pop('Label')
 
     # --- 3. Train/Test Split ---
     print(f'Splitting data with test_size={test_size}...')
     # Stratify is often useful for classification tasks to maintain class proportions, consider adding stratify=label
-    X_train, X_test, y_train, y_test = train_test_split(traffic_df, label, test_size=test_size, random_state=42, stratify=label)
+    X_train, X_test = train_test_split(traffic_df, test_size=test_size, random_state=42)
     print(f'Train shape: {X_train.shape}, Test shape: {X_test.shape}')
 
     # --- 4. Feature Engineering: Port Categories ---
@@ -128,14 +129,11 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
         # Filter both X and y based on train mask
         X_train = X_train.loc[train_inliers_mask]
-        y_train = y_train.loc[train_inliers_mask] # Keep y aligned
         # Filter test set
         X_test = X_test.loc[test_inliers_mask]
-        y_test = y_test.loc[test_inliers_mask] # Keep y aligned
         print(f'Shape after Z-score on {fwd_packet_len_mean_col}: Train={X_train.shape}, Test={X_test.shape}')
     else:
         print(f"Skipping Z-score for {fwd_packet_len_mean_col} as standard deviation is zero.")
-
 
     # --- 5b. Z-Score Outlier Removal (Example on 'Fwd Packet Length Std') ---
     # (Repeating the pattern for another column)
@@ -154,13 +152,11 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
         # Filter both X and y based on train mask
         X_train = X_train.loc[train_inliers_mask_std]
-        y_train = y_train.loc[train_inliers_mask_std] # Keep y aligned
         # Filter test set
         X_test = X_test.loc[test_inliers_mask_std]
-        y_test = y_test.loc[test_inliers_mask_std] # Keep y aligned
         print(f'Shape after Z-score on {fwd_packet_len_std_col}: Train={X_train.shape}, Test={X_test.shape}')
     else:
-         print(f"Skipping Z-score for {fwd_packet_len_std_col} as standard deviation is zero.")
+        print(f"Skipping Z-score for {fwd_packet_len_std_col} as standard deviation is zero.")
 
     # --- 5c. KMeans Outlier Removal (Example on Bwd Packet Length features) ---
     # Note: This scales, fits KMeans, calculates distances, finds a threshold, and filters.
@@ -176,22 +172,22 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         # Scale data (fit on train, transform train and test)
         scaler = MinMaxScaler(feature_range=(0, 1))
         train_bwd_packet_len_dis_scaled = scaler.fit_transform(bwd_packet_length_distribution_train)
-        test_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution_test) # Scale test data too
+        test_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution_test)  # Scale test data too
 
         # Apply K-Means clustering (fit only on train)
         k = 3  # Number of clusters. Consider using Elbow method or Silhouette score to find optimal k.
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10) # n_init='auto' in newer sklearn
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)  # n_init='auto' in newer sklearn
         kmeans.fit(train_bwd_packet_len_dis_scaled)
 
         # Compute distances to the nearest cluster centroid for training data
-        distances_train = np.linalg.norm(train_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_], axis=1)
+        distances_train = np.linalg.norm(train_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_],
+                                         axis=1)
         # Define threshold based on percentile of distances (removes top 5% furthest points)
         threshold_kmeans = np.percentile(distances_train, 95)
 
         # Filter training data based on distance threshold
         kmeans_inliers_mask_train = distances_train <= threshold_kmeans
         X_train = X_train.loc[kmeans_inliers_mask_train]
-        y_train = y_train.loc[kmeans_inliers_mask_train] # Keep y aligned
 
         # --- Filter Test Data using KMeans (Optional - was commented out) ---
         # If applying to test set, calculate distances for test points to *trained* centroids
@@ -201,10 +197,10 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         # X_test = X_test.loc[kmeans_inliers_mask_test]
         # y_test = y_test.loc[kmeans_inliers_mask_test] # Keep y aligned
         # print(f'Shape after KMeans outlier removal: Train={X_train.shape}, Test={X_test.shape}')
-        print(f'Shape after KMeans outlier removal (Train only): Train={X_train.shape}, Test={X_test.shape}') # Updated print statement
+        print(
+            f'Shape after KMeans outlier removal (Train only): Train={X_train.shape}, Test={X_test.shape}')  # Updated print statement
     else:
         print(f"Skipping KMeans outlier removal as one or more columns ({bwd_packet_len_columns}) not found.")
-
 
     # --- 6. Feature Transformation: Power Transformation ---
     print('Applying Power Transformation (Yeo-Johnson)...')
@@ -216,7 +212,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # Ensure all power columns exist in the dataframe after outlier removal
     power_columns = [col for col in power_columns if col in X_train.columns]
     if not power_columns:
-         print("Warning: No columns found for Power Transformation after previous steps.")
+        print("Warning: No columns found for Power Transformation after previous steps.")
     else:
         pt_model = PowerTransformer(method='yeo-johnson')
         # Fit on training data only
@@ -230,16 +226,15 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         joblib.dump(pt_model, power_transformer_filepath)
         print(f"PowerTransformer saved to {power_transformer_filepath}")
 
-
     # --- 7. Feature Encoding: One-Hot Encoding ---
     print('Applying One-Hot Encoding for port categories...')
     one_hot_encoding_columns = ['Source Port', 'Destination Port']
     # Ensure columns exist
     one_hot_encoding_columns = [col for col in one_hot_encoding_columns if col in X_train.columns]
     if not one_hot_encoding_columns:
-         print("Warning: No columns found for One-Hot Encoding.")
-         onehot_encoder_filepath = None # Handle case where encoder isn't created
-         onehot_encoder = None
+        print("Warning: No columns found for One-Hot Encoding.")
+        onehot_encoder_filepath = None  # Handle case where encoder isn't created
+        onehot_encoder = None
     else:
         # Initialize OneHotEncoder
         # handle_unknown='ignore' prevents errors if test set has categories not seen in train
@@ -249,13 +244,17 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
         # Transform train data
         encoded_data_train = onehot_encoder.transform(X_train[one_hot_encoding_columns])
-        encoded_data_train_df = pd.DataFrame(encoded_data_train, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_train.index)
+        encoded_data_train_df = pd.DataFrame(encoded_data_train,
+                                             columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
+                                             index=X_train.index)
         # Concatenate and drop original columns
         X_train = pd.concat([X_train.drop(columns=one_hot_encoding_columns), encoded_data_train_df], axis=1)
 
         # Transform test data
         encoded_data_test = onehot_encoder.transform(X_test[one_hot_encoding_columns])
-        encoded_data_test_df = pd.DataFrame(encoded_data_test, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_test.index)
+        encoded_data_test_df = pd.DataFrame(encoded_data_test,
+                                            columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
+                                            index=X_test.index)
         # Concatenate and drop original columns
         X_test = pd.concat([X_test.drop(columns=one_hot_encoding_columns), encoded_data_test_df], axis=1)
 
@@ -264,13 +263,13 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         joblib.dump(onehot_encoder, onehot_encoder_filepath)
         print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
 
-
     # --- 8. Outlier Detection/Removal (Isolation Forest - Applied AFTER transformations) ---
     # Applying Isolation Forest on the transformed/encoded data
     print('Applying Isolation Forest for global outlier removal...')
     # Ensure X_train is not empty before fitting
     if not X_train.empty:
-        iso_forest = IsolationForest(n_estimators=200, contamination='auto', random_state=42) # 'auto' contamination is often a good starting point
+        iso_forest = IsolationForest(n_estimators=200, contamination='auto',
+                                     random_state=42)  # 'auto' contamination is often a good starting point
         # Fit the model only on training data
         iso_forest.fit(X_train)
 
@@ -284,9 +283,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
         # Remove outliers from train and test sets (X and y)
         X_train = X_train.loc[iso_inliers_mask_train]
-        y_train = y_train.loc[iso_inliers_mask_train] # Keep y aligned
         X_test = X_test.loc[iso_inliers_mask_test]
-        y_test = y_test.loc[iso_inliers_mask_test] # Keep y aligned
 
         print(f'Shape after Isolation Forest: Train={X_train.shape}, Test={X_test.shape}')
 
@@ -296,14 +293,21 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         print(f"IsolationForest model saved to {iso_forest_model_filepath}")
     else:
         print("Skipping Isolation Forest as training data is empty.")
-        iso_forest_model_filepath = None # Handle case where model isn't created
+        iso_forest_model_filepath = None  # Handle case where model isn't created
 
+    # --- 9. Normalize data (Applied only to Training Data) ---
+    # init Min Max scaler to normalize dataset
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler.fit(X_train)
+    X_train = scaler.transform(X_train)
+    X_test = scaler.transform(X_test)
+    scaler_model_filepath = os.path.join(results_folder_path, SCALER_NAME)
+    joblib.dump(scaler, scaler_model_filepath)
 
     # --- 9. Undersampling (Applied only to Training Data) ---
     print('Applying undersampling to balance training data...')
     # Re-attach labels temporarily for sampling
-    X_train_temp = X_train.copy() # Work on a copy
-    X_train_temp['Label'] = y_train
+    X_train_temp = X_train.copy()  # Work on a copy
 
     x_train_traffic_df_list = []
     for valid_traffic_type in valid_traffic_types:
@@ -313,13 +317,15 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
         # Check if there are enough instances and if sampling is needed
         if n_available > n_instances_per_traffic_type:
-            print(f"Sampling {n_instances_per_traffic_type} instances for type '{valid_traffic_type}' (available: {n_available})")
+            print(
+                f"Sampling {n_instances_per_traffic_type} instances for type '{valid_traffic_type}' (available: {n_available})")
             x_train_traffic_type_df = x_train_traffic_type_df.sample(n=n_instances_per_traffic_type, random_state=42)
         elif n_available > 0:
-             print(f"Keeping all {n_available} instances for type '{valid_traffic_type}' (less than target {n_instances_per_traffic_type})")
+            print(
+                f"Keeping all {n_available} instances for type '{valid_traffic_type}' (less than target {n_instances_per_traffic_type})")
         else:
-             print(f"Warning: No instances found for type '{valid_traffic_type}' after previous steps.")
-             continue # Skip if no instances
+            print(f"Warning: No instances found for type '{valid_traffic_type}' after previous steps.")
+            continue  # Skip if no instances
 
         # Append the sampled/kept data
         x_train_traffic_df_list.append(x_train_traffic_type_df)
@@ -336,37 +342,11 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     else:
         print("Warning: Training data is empty after undersampling attempt.")
         # Handle empty training data case - maybe raise error or return empty DFs
-        X_train_sampled = pd.DataFrame(columns=X_train.columns) # Empty DF with correct columns
-        y_train_sampled = pd.Series(dtype=label.dtype) # Empty Series
+        X_train_sampled = pd.DataFrame(columns=X_train.columns)  # Empty DF with correct columns
         # Depending on requirements, might need to handle test_traffic_df creation differently too
 
     # Keep the original (but filtered) test set
     test_traffic_df = X_test.copy()
-    test_traffic_df['Label'] = y_test # Add label back to test set
-
-    # --- 10. Label Encoding ---
-    print('Applying Label Encoding to target variable...')
-    le = LabelEncoder()
-    # Fit on the original unique labels present *before* sampling if possible,
-    # or ensure all expected labels are included. Fitting on sampled data might miss labels.
-    # A safer approach might be to fit on `valid_traffic_types` directly if they represent all possible labels.
-    # le.fit(valid_traffic_types) # Alternative: Fit on all expected types
-    le.fit(y_train_sampled) # Fit on the labels present in the final sampled training data
-
-    # Transform train and test labels
-    # Check if dataframes are not empty before transforming
-    if not X_train_sampled.empty:
-        X_train_sampled['Label'] = le.transform(y_train_sampled)
-    if not test_traffic_df.empty:
-        test_traffic_df['Label'] = le.transform(test_traffic_df['Label']) # Use original y_test here
-
-    # Get encoding mapping {label_string: index}
-    label_encoding_mapping = {label: int(idx) for label, idx in zip(le.classes_, le.transform(le.classes_))}
-    print(f"Label encoding mapping: {label_encoding_mapping}")
-    # Save Label encoder
-    label_encoder_filepath = os.path.join(results_folder_path, LABEL_ENCODER_NAME)
-    joblib.dump(le, label_encoder_filepath)
-    print(f"LabelEncoder saved to {label_encoder_filepath}")
 
     # --- 11. Save Preprocessed Data ---
     print('Saving preprocessed data...')
@@ -379,25 +359,25 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print(f"Preprocessed train data saved to {train_traffic_filepath}")
     print(f"Preprocessed test data saved to {test_traffic_filepath}")
 
-
     # --- 12. Log Parameters and Artifacts ---
     print('Logging parameters and preparing artifacts dictionary...')
     # Consolidate parameters for logging
     params = {
-        "relevant_columns": relevant_column, # Logged as list
-        "valid_traffic_types": valid_traffic_types, # Logged as list
-        "label_encoding_mapping": label_encoding_mapping, # Logged as dict
+        "relevant_columns": relevant_column,  # Logged as list
+        "valid_traffic_types": valid_traffic_types,  # Logged as list
         "min_port": min_port,
         "max_port": max_port,
-        "power_columns": power_columns if 'power_columns' in locals() else [], # Ensure variable exists
-        "one_hot_encoding_columns": one_hot_encoding_columns if 'one_hot_encoding_columns' in locals() else [], # Ensure variable exists
+        "power_columns": power_columns if 'power_columns' in locals() else [],  # Ensure variable exists
+        "one_hot_encoding_columns": one_hot_encoding_columns if 'one_hot_encoding_columns' in locals() else [],
+        # Ensure variable exists
         "n_instances_per_traffic_type_target": n_instances_per_traffic_type,
         "test_size": test_size,
         "z_score_threshold": threshold_z,
         # Add other relevant parameters like KMeans k, threshold, Isolation Forest params if desired
     }
     # Log parameters to MLflow
-    mlflow.log_params({k: str(v) if isinstance(v, (list, dict)) else v for k, v in params.items()}) # Convert list/dict to str for MLflow UI
+    mlflow.log_params({k: str(v) if isinstance(v, (list, dict)) else v for k, v in
+                       params.items()})  # Convert list/dict to str for MLflow UI
 
     # Save parameters locally as JSON
     preprocess_params_filepath = os.path.join(results_folder_path, PREPROCESS_PARAMS_NAME)
@@ -411,12 +391,11 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "power_transformer": power_transformer_filepath if 'power_transformer_filepath' in locals() and power_transformer_filepath else None,
         "onehot_encoder": onehot_encoder_filepath if 'onehot_encoder_filepath' in locals() and onehot_encoder_filepath else None,
         "iso_forest_model": iso_forest_model_filepath if 'iso_forest_model_filepath' in locals() and iso_forest_model_filepath else None,
-        "label_encoder": label_encoder_filepath if 'label_encoder_filepath' in locals() else None,
+        "scaler": scaler_model_filepath if 'scaler_model_filepath' in locals() else None,
         "preprocess_params": preprocess_params_filepath if 'preprocess_params_filepath' in locals() else None
     }
     # Filter out None values before returning
     preprocess_artifacts = {k: v for k, v in preprocess_artifacts.items() if v is not None}
-
 
     # Return paths to preprocessed data and the dictionary of artifact paths
     return train_traffic_filepath, test_traffic_filepath, preprocess_artifacts
