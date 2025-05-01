@@ -30,12 +30,15 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=32):
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
     assert 1 <= batch_size <= 256, 'Batch size should be between 1 and 124.'
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
+    # remove label column
+    # NOTE: This feature may be needed in the future to build the CGAN
+    # traffic_df.pop('Label')
     n_features = len(traffic_df.columns)
     tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Split into training and validation sets
     print('Split dataset into train and validation set')
@@ -61,9 +64,9 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=32):
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
         # TODO: Update VAE to allow update input dimension and latent dimension as hyperparameter: n_features, L
-        model: VAE = VAE()
+        model: VAE = VAE().to(device)
 
-        criterion = nn.MSELoss()
+
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
         early_stopping = EarlyStopping(patience=early_stopping_patience)

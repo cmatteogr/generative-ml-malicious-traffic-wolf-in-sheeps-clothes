@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 
 # --- Example Usage ---
-D = 784  # input dimension
-L = 20   # number of latents
-M = 400  # hidden layer dimension
+D = 42  # input dimension
+L = 15   # number of latents
+M = 32  # hidden layer dimension
 
 """
 The architecture has constant dimension in the hidden layers, this is intentional:

@@ -6,6 +6,7 @@ outlier removal, transformation, and sampling.
 """
 import json
 import os.path
+from operator import index
 from typing import List, Tuple, Dict # Added Dict for type hint
 from sklearn.ensemble import IsolationForest
 import numpy as np
@@ -88,10 +89,6 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print(f'Shape after initial filtering: {traffic_df.shape}')
     if traffic_df.empty:
         raise ValueError("DataFrame is empty after initial filtering. Check filter criteria and input data.")
-
-    # Separate features (X)
-    # NOTE: Label is not needed for the VAE-GAN
-    traffic_df.pop('Label')
 
     # --- 3. Train/Test Split ---
     print(f'Splitting data with test_size={test_size}...')
@@ -263,6 +260,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         joblib.dump(onehot_encoder, onehot_encoder_filepath)
         print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
 
+    train_labels = X_train.pop('Label')
+    test_labels = X_test.pop('Label')
+
     # --- 8. Outlier Detection/Removal (Isolation Forest - Applied AFTER transformations) ---
     # Applying Isolation Forest on the transformed/encoded data
     print('Applying Isolation Forest for global outlier removal...')
@@ -299,10 +299,16 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # init Min Max scaler to normalize dataset
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaler.fit(X_train)
-    X_train = scaler.transform(X_train)
-    X_test = scaler.transform(X_test)
+    X_train_scaled = scaler.transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    X_train = pd.DataFrame(X_train_scaled, index=X_train.index, columns=X_train.columns)
+    X_test = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
     scaler_model_filepath = os.path.join(results_folder_path, SCALER_NAME)
     joblib.dump(scaler, scaler_model_filepath)
+
+    # add back the labels to apply undersampling
+    X_train['Label'] = train_labels
+    X_test['Label'] = test_labels
 
     # --- 9. Undersampling (Applied only to Training Data) ---
     print('Applying undersampling to balance training data...')
