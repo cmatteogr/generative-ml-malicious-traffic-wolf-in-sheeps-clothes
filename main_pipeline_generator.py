@@ -1,12 +1,7 @@
 """
 traffic classifier pipeline
 """
-import os
-import shutil
-from ml_models.malicious_traffic_classifier import MaliciousTrafficClassifierModel
-from mlflow_api.mlflow_client import MlflowClientHandler
 import mlflow
-from pipeline.evaluation.evaluation_traffic_classifier import evaluation
 from pipeline.preprocess.preprocess_generator import preprocessing
 from pipeline.train.train_traffic_latent_variable_gan import train
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE

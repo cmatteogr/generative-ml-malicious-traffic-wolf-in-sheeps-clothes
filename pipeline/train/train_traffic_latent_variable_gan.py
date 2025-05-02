@@ -14,7 +14,7 @@ from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_latent_variable_gan import VAE
 
 
-def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=32):
+def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=132):
     """
     VAE training
 
@@ -125,7 +125,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=32):
         return best_trial_val_loss  # Optuna minimizes this value
 
     # Execute optuna optimizer study
-    print('train anomaly detection model')
+    print('train VAE')
     study = optuna.create_study(direction='minimize')
     study.optimize(train_model, n_trials=50)
     # Get Best parameters
