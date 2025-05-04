@@ -3,18 +3,17 @@ Author: Cesar M. Gonzalez
 
 """
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 import optuna
-import json
 import pandas as pd
-
+import mlflow
+import time
 from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_latent_variable_gan import VAE
 
 
-def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512):
+def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024):
     """
     VAE training
 
@@ -28,9 +27,10 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512)
     # Check input arguments
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
-    assert 1 <= batch_size <= 512, 'Batch size should be between 1 and 512.'
+    # assert 1 <= batch_size <= 1024, 'Batch size should be between 1 and 512.'
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
@@ -66,15 +66,16 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512)
         # TODO: Update VAE to allow update input dimension and latent dimension as hyperparameter: n_features, L
         model: VAE = VAE().to(device)
 
-
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
         early_stopping = EarlyStopping(patience=early_stopping_patience)
 
         # Training loop
-        print('Training autoencoder anomaly detection model')
+        print('Training VAE model')
         best_trial_val_loss = float('inf')
         for epoch in range(num_epochs):
+            epoch_start_time = time.time()
+
             model.train()
             train_loss_accum = 0.0
             for data in train_loader:
@@ -89,6 +90,8 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512)
                 train_loss_accum += loss.item()
             # Calculate train batch loss
             avg_train_loss = train_loss_accum / len(train_loader)
+            # log metrics
+            mlflow.log_metric('neg_elbo_value', avg_train_loss)
 
             # Validation
             model.eval()
@@ -102,9 +105,12 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512)
                         raise optuna.exceptions.TrialPruned()
                     val_loss_accum += loss.item()
             avg_val_loss = val_loss_accum / len(val_loader)
+            # log metrics
+            mlflow.log_metric('neg_elbo_value_val', avg_val_loss)
 
+            epoch_duration = time.time() - epoch_start_time
             print(
-                f'  Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}')
+                f'  Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}, Duration: {epoch_duration:.2f}s')
 
             # Optuna Pruning / Reporting
             trial.report(avg_val_loss, epoch)
@@ -131,4 +137,5 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512)
     # Get Best parameters
     best_params = study.best_params
     print('best params: {}'.format(best_params))
+    mlflow.log_param('vae_params', str(best_params))
 

@@ -4,11 +4,12 @@ VAE for Continuous Data using Gaussian Likelihood (Implicit Fixed Variance via M
 import math # Use math.pi
 import torch
 import torch.nn as nn
+import mlflow
 
 # --- Example Usage ---
 D = 42  # input dimension
 L = 15   # number of latents
-M = 32  # hidden layer dimension
+M = 38  # hidden layer dimension
 
 """
 The architecture has constant dimension in the hidden layers, this is intentional:
@@ -30,6 +31,12 @@ encoder_net = nn.Sequential(
     nn.ReLU(), # Changed to ReLU, common choice
     nn.Linear(M, M),
     nn.ReLU(),
+    nn.Linear(M, M),
+    nn.ReLU(),
+    nn.Linear(M, M),
+    nn.ReLU(),
+    nn.Linear(M, M),
+    nn.ReLU(),
     # NOTE: This last layer is the Encoder returns twice the latent space dimension L because it returns Mean - Standard Derivation, to generate Gaussian representations
     # VAE architecture: https://youtu.be/qJeaCHQ1k2w?t=799
     # Generative Deep Learning Book: Variational Autoencoders - The Encoder: page 135
@@ -40,6 +47,10 @@ encoder_net = nn.Sequential(
 # Output size must be D for continuous data (predicting the mean)
 decoder_net = nn.Sequential(
     nn.Linear(L, M), # The Latent space of the decoder is connected to the z representation after use the reparameterization trick to transform (Mean - Standard Derivation) to z
+    nn.ReLU(),
+    nn.Linear(M, M),
+    nn.ReLU(),
+    nn.Linear(M, M),
     nn.ReLU(),
     nn.Linear(M, M),
     nn.ReLU(),
@@ -289,9 +300,12 @@ class VAE(nn.Module):
         # Return average or sum of negative ELBO (loss to be minimized)
         # We are using batches so it make sense
         if reduction == 'sum':
-            return neg_elbo.sum()
-        else: # Default 'avg'
-            return neg_elbo.mean()
+            neg_elbo_value = neg_elbo.sum()
+        else:
+            neg_elbo_value = neg_elbo.mean()
+
+        return neg_elbo_value
+
 
     def sample(self, batch_size=64):
         """Generates new samples x' by sampling z ~ p(z) and decoding."""
