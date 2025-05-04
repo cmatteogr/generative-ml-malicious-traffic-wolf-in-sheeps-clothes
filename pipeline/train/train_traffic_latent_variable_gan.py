@@ -14,7 +14,7 @@ from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_latent_variable_gan import VAE
 
 
-def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=132):
+def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=512):
     """
     VAE training
 
@@ -28,7 +28,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=132)
     # Check input arguments
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
-    assert 1 <= batch_size <= 256, 'Batch size should be between 1 and 124.'
+    assert 1 <= batch_size <= 512, 'Batch size should be between 1 and 512.'
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
