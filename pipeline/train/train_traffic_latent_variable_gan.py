@@ -58,7 +58,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
 
     def train_model(trial):
         # Init the Hyperparameters to change
-        learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True)
+        learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-2, log=True)
         hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
         latent_dim = trial.suggest_int('latent_dim', 12, 22)
 

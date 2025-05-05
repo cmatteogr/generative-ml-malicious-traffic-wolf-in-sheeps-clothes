@@ -162,42 +162,39 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print('Applying KMeans outlier removal for Bwd Packet Length Mean/Std...')
     bwd_packet_len_columns = ['Bwd Packet Length Mean', 'Bwd Packet Length Std']
     # Check if columns exist before proceeding
-    if all(col in X_train.columns for col in bwd_packet_len_columns):
-        bwd_packet_length_distribution_train = X_train[bwd_packet_len_columns]
-        bwd_packet_length_distribution_test = X_test[bwd_packet_len_columns]
+    bwd_packet_length_distribution_train = X_train[bwd_packet_len_columns]
+    bwd_packet_length_distribution_test = X_test[bwd_packet_len_columns]
 
-        # Scale data (fit on train, transform train and test)
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        train_bwd_packet_len_dis_scaled = scaler.fit_transform(bwd_packet_length_distribution_train)
-        test_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution_test)  # Scale test data too
+    # Scale data (fit on train, transform train and test)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler.fit(bwd_packet_length_distribution_train)
+    train_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution_train)
+    test_bwd_packet_len_dis_scaled = scaler.transform(bwd_packet_length_distribution_test)  # Scale test data too
 
-        # Apply K-Means clustering (fit only on train)
-        k = 3  # Number of clusters. Consider using Elbow method or Silhouette score to find optimal k.
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)  # n_init='auto' in newer sklearn
-        kmeans.fit(train_bwd_packet_len_dis_scaled)
+    # Apply K-Means clustering (fit only on train)
+    k = 3  # Number of clusters. Consider using Elbow method or Silhouette score to find optimal k.
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)  # n_init='auto' in newer sklearn
+    kmeans.fit(train_bwd_packet_len_dis_scaled)
 
-        # Compute distances to the nearest cluster centroid for training data
-        distances_train = np.linalg.norm(train_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_],
-                                         axis=1)
-        # Define threshold based on percentile of distances (removes top 5% furthest points)
-        threshold_kmeans = np.percentile(distances_train, 95)
+    # Compute distances to the nearest cluster centroid for training data
+    distances_train = np.linalg.norm(train_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[kmeans.labels_],
+                                     axis=1)
+    # Define threshold based on percentile of distances (removes top 5% furthest points)
+    threshold_kmeans = np.percentile(distances_train, 95)
 
-        # Filter training data based on distance threshold
-        kmeans_inliers_mask_train = distances_train <= threshold_kmeans
-        X_train = X_train.loc[kmeans_inliers_mask_train]
+    # Filter training data based on distance threshold
+    kmeans_inliers_mask_train = distances_train <= threshold_kmeans
+    X_train = X_train.loc[kmeans_inliers_mask_train]
 
-        # --- Filter Test Data using KMeans (Optional - was commented out) ---
-        # If applying to test set, calculate distances for test points to *trained* centroids
-        # test_labels = kmeans.predict(test_bwd_packet_len_dis_scaled)
-        # distances_test = np.linalg.norm(test_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[test_labels], axis=1)
-        # kmeans_inliers_mask_test = distances_test <= threshold_kmeans # Use same threshold from train
-        # X_test = X_test.loc[kmeans_inliers_mask_test]
-        # y_test = y_test.loc[kmeans_inliers_mask_test] # Keep y aligned
-        # print(f'Shape after KMeans outlier removal: Train={X_train.shape}, Test={X_test.shape}')
-        print(
-            f'Shape after KMeans outlier removal (Train only): Train={X_train.shape}, Test={X_test.shape}')  # Updated print statement
-    else:
-        print(f"Skipping KMeans outlier removal as one or more columns ({bwd_packet_len_columns}) not found.")
+    # --- Filter Test Data using KMeans (Optional - was commented out) ---
+    # If applying to test set, calculate distances for test points to *trained* centroids
+    # test_labels = kmeans.predict(test_bwd_packet_len_dis_scaled)
+    # distances_test = np.linalg.norm(test_bwd_packet_len_dis_scaled - kmeans.cluster_centers_[test_labels], axis=1)
+    # kmeans_inliers_mask_test = distances_test <= threshold_kmeans # Use same threshold from train
+    # X_test = X_test.loc[kmeans_inliers_mask_test]
+    # y_test = y_test.loc[kmeans_inliers_mask_test] # Keep y aligned
+    # print(f'Shape after KMeans outlier removal: Train={X_train.shape}, Test={X_test.shape}')
+    print(f'Shape after KMeans outlier removal (Train only): Train={X_train.shape}, Test={X_test.shape}')  # Updated print statement
 
     # --- 6. Feature Transformation: Power Transformation ---
     print('Applying Power Transformation (Yeo-Johnson)...')
@@ -208,92 +205,78 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
                      'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
     # Ensure all power columns exist in the dataframe after outlier removal
     power_columns = [col for col in power_columns if col in X_train.columns]
-    if not power_columns:
-        print("Warning: No columns found for Power Transformation after previous steps.")
-    else:
-        pt_model = PowerTransformer(method='yeo-johnson')
-        # Fit on training data only
-        pt_model.fit(X_train[power_columns])
-        # Transform both train and test data
-        # Use .loc to assign back safely
-        X_train.loc[:, power_columns] = pt_model.transform(X_train[power_columns])
-        X_test.loc[:, power_columns] = pt_model.transform(X_test[power_columns])
-        # Save the fitted PowerTransformer
-        power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
-        joblib.dump(pt_model, power_transformer_filepath)
-        print(f"PowerTransformer saved to {power_transformer_filepath}")
+    pt_model = PowerTransformer(method='yeo-johnson')
+    # Fit on training data only
+    pt_model.fit(X_train[power_columns])
+    # Transform both train and test data
+    # Use .loc to assign back safely
+    X_train.loc[:, power_columns] = pt_model.transform(X_train[power_columns])
+    X_test.loc[:, power_columns] = pt_model.transform(X_test[power_columns])
+    # Save the fitted PowerTransformer
+    power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
+    joblib.dump(pt_model, power_transformer_filepath)
+    print(f"PowerTransformer saved to {power_transformer_filepath}")
 
     # --- 7. Feature Encoding: One-Hot Encoding ---
     print('Applying One-Hot Encoding for port categories...')
-    one_hot_encoding_columns = ['Source Port', 'Destination Port']
+    one_hot_encoding_columns = ['Source Port', 'Destination Port', 'Label']
     # Ensure columns exist
     one_hot_encoding_columns = [col for col in one_hot_encoding_columns if col in X_train.columns]
-    if not one_hot_encoding_columns:
-        print("Warning: No columns found for One-Hot Encoding.")
-        onehot_encoder_filepath = None  # Handle case where encoder isn't created
-        onehot_encoder = None
-    else:
-        # Initialize OneHotEncoder
-        # handle_unknown='ignore' prevents errors if test set has categories not seen in train
-        onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        # Fit on training data
-        onehot_encoder.fit(X_train[one_hot_encoding_columns])
+    # Initialize OneHotEncoder
+    # handle_unknown='ignore' prevents errors if test set has categories not seen in train
+    onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    # Fit on training data
+    onehot_encoder.fit(X_train[one_hot_encoding_columns])
 
-        # Transform train data
-        encoded_data_train = onehot_encoder.transform(X_train[one_hot_encoding_columns])
-        encoded_data_train_df = pd.DataFrame(encoded_data_train,
-                                             columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
-                                             index=X_train.index)
-        # Concatenate and drop original columns
-        X_train = pd.concat([X_train.drop(columns=one_hot_encoding_columns), encoded_data_train_df], axis=1)
+    # Transform train data
+    encoded_data_train = onehot_encoder.transform(X_train[one_hot_encoding_columns])
+    encoded_data_train_df = pd.DataFrame(encoded_data_train,
+                                         columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
+                                         index=X_train.index)
+    # Concatenate and drop original columns
+    X_train = pd.concat([X_train.drop(columns=one_hot_encoding_columns), encoded_data_train_df], axis=1)
 
-        # Transform test data
-        encoded_data_test = onehot_encoder.transform(X_test[one_hot_encoding_columns])
-        encoded_data_test_df = pd.DataFrame(encoded_data_test,
-                                            columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
-                                            index=X_test.index)
-        # Concatenate and drop original columns
-        X_test = pd.concat([X_test.drop(columns=one_hot_encoding_columns), encoded_data_test_df], axis=1)
+    # Transform test data
+    encoded_data_test = onehot_encoder.transform(X_test[one_hot_encoding_columns])
+    encoded_data_test_df = pd.DataFrame(encoded_data_test,
+                                        columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns),
+                                        index=X_test.index)
+    # Concatenate and drop original columns
+    X_test = pd.concat([X_test.drop(columns=one_hot_encoding_columns), encoded_data_test_df], axis=1)
 
-        # Save the fitted OneHotEncoder
-        onehot_encoder_filepath = os.path.join(results_folder_path, ONEHOT_ENCODER_NAME)
-        joblib.dump(onehot_encoder, onehot_encoder_filepath)
-        print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
-
-    train_labels = X_train.pop('Label')
-    test_labels = X_test.pop('Label')
+    # Save the fitted OneHotEncoder
+    onehot_encoder_filepath = os.path.join(results_folder_path, ONEHOT_ENCODER_NAME)
+    joblib.dump(onehot_encoder, onehot_encoder_filepath)
+    print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
 
     # --- 8. Outlier Detection/Removal (Isolation Forest - Applied AFTER transformations) ---
     # Applying Isolation Forest on the transformed/encoded data
     print('Applying Isolation Forest for global outlier removal...')
     # Ensure X_train is not empty before fitting
-    if not X_train.empty:
-        iso_forest = IsolationForest(n_estimators=200, contamination='auto',
-                                     random_state=42)  # 'auto' contamination is often a good starting point
-        # Fit the model only on training data
-        iso_forest.fit(X_train)
 
-        # Predict anomalies (-1 for outliers, 1 for inliers)
-        train_outliers = iso_forest.predict(X_train)
-        test_outliers = iso_forest.predict(X_test)
+    iso_forest = IsolationForest(n_estimators=200, contamination='auto',
+                                 random_state=42)  # 'auto' contamination is often a good starting point
+    # Fit the model only on training data
+    iso_forest.fit(X_train)
 
-        # Create masks for inliers
-        iso_inliers_mask_train = train_outliers != -1
-        iso_inliers_mask_test = test_outliers != -1
+    # Predict anomalies (-1 for outliers, 1 for inliers)
+    train_outliers = iso_forest.predict(X_train)
+    test_outliers = iso_forest.predict(X_test)
 
-        # Remove outliers from train and test sets (X and y)
-        X_train = X_train.loc[iso_inliers_mask_train]
-        X_test = X_test.loc[iso_inliers_mask_test]
+    # Create masks for inliers
+    iso_inliers_mask_train = train_outliers != -1
+    iso_inliers_mask_test = test_outliers != -1
 
-        print(f'Shape after Isolation Forest: Train={X_train.shape}, Test={X_test.shape}')
+    # Remove outliers from train and test sets (X and y)
+    X_train = X_train.loc[iso_inliers_mask_train]
+    X_test = X_test.loc[iso_inliers_mask_test]
 
-        # Save the fitted IsolationForest model
-        iso_forest_model_filepath = os.path.join(results_folder_path, ISO_FOREST_MODEL_NAME)
-        joblib.dump(iso_forest, iso_forest_model_filepath)
-        print(f"IsolationForest model saved to {iso_forest_model_filepath}")
-    else:
-        print("Skipping Isolation Forest as training data is empty.")
-        iso_forest_model_filepath = None  # Handle case where model isn't created
+    print(f'Shape after Isolation Forest: Train={X_train.shape}, Test={X_test.shape}')
+
+    # Save the fitted IsolationForest model
+    iso_forest_model_filepath = os.path.join(results_folder_path, ISO_FOREST_MODEL_NAME)
+    joblib.dump(iso_forest, iso_forest_model_filepath)
+    print(f"IsolationForest model saved to {iso_forest_model_filepath}")
 
     # --- 9. Normalize data (Applied only to Training Data) ---
     # init Min Max scaler to normalize dataset
@@ -305,10 +288,6 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     X_test = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
     scaler_model_filepath = os.path.join(results_folder_path, SCALER_NAME)
     joblib.dump(scaler, scaler_model_filepath)
-
-    # add back the labels to apply undersampling
-    X_train['Label'] = train_labels
-    X_test['Label'] = test_labels
 
     # --- 9. Undersampling (Applied only to Training Data) ---
     print('Applying undersampling to balance training data...')
@@ -331,25 +310,19 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
                 f"Keeping all {n_available} instances for type '{valid_traffic_type}' (less than target {n_instances_per_traffic_type})")
         else:
             print(f"Warning: No instances found for type '{valid_traffic_type}' after previous steps.")
-            continue  # Skip if no instances
+            continue
 
         # Append the sampled/kept data
         x_train_traffic_df_list.append(x_train_traffic_type_df)
 
     # Concatenate sampled dataframes if list is not empty
-    if x_train_traffic_df_list:
-        train_traffic_df = pd.concat(x_train_traffic_df_list, axis=0)
-        # Separate features and labels again
-        y_train_sampled = train_traffic_df.pop('Label')
-        X_train_sampled = train_traffic_df
-        print(f"Shape after undersampling: Train={X_train_sampled.shape}")
-        print("Class distribution in sampled training data:")
-        print(y_train_sampled.value_counts())
-    else:
-        print("Warning: Training data is empty after undersampling attempt.")
-        # Handle empty training data case - maybe raise error or return empty DFs
-        X_train_sampled = pd.DataFrame(columns=X_train.columns)  # Empty DF with correct columns
-        # Depending on requirements, might need to handle test_traffic_df creation differently too
+    train_traffic_df = pd.concat(x_train_traffic_df_list, axis=0)
+    # Separate features and labels again
+    y_train_sampled = train_traffic_df.pop('Label')
+    X_train_sampled = train_traffic_df
+    print(f"Shape after undersampling: Train={X_train_sampled.shape}")
+    print("Class distribution in sampled training data:")
+    print(y_train_sampled.value_counts())
 
     # Keep the original (but filtered) test set
     test_traffic_df = X_test.copy()
