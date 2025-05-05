@@ -27,7 +27,6 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
     # Check input arguments
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
-    # assert 1 <= batch_size <= 1024, 'Batch size should be between 1 and 512.'
 
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
@@ -60,11 +59,13 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
     def train_model(trial):
         # Init the Hyperparameters to change
         learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True)
+        hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
+        latent_dim = trial.suggest_int('latent_dim', 12, 22)
 
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
         # TODO: Update VAE to allow update input dimension and latent dimension as hyperparameter: n_features, L
-        model: VAE = VAE().to(device)
+        model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
 
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
@@ -78,18 +79,33 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
 
             model.train()
             train_loss_accum = 0.0
+
+            reconstruction_loss_accum = 0.0
+            kl_loss_accum = 0.0
+
             for data in train_loader:
                 # Forward pass
                 data = data.to(device)
                 optimizer.zero_grad()
 
-                loss = model(data, reduction='avg')  # Use average loss over batch
+                reconstruction_loss_value, kl_value = model(data, reduction='avg')  # Use average loss over batch
+                loss = reconstruction_loss_value + kl_value
 
                 loss.backward()
                 optimizer.step()
                 train_loss_accum += loss.item()
+
+                reconstruction_loss_accum += reconstruction_loss_value.item()
+                kl_loss_accum += kl_value.item()
+
             # Calculate train batch loss
             avg_train_loss = train_loss_accum / len(train_loader)
+
+            avg_reconstruction_loss = reconstruction_loss_accum / len(train_loader)
+            avg_kl_loss = kl_loss_accum / len(train_loader)
+
+            print(f'train MSE: {avg_reconstruction_loss}, train KL-divergence: {avg_kl_loss}')
+
             # log metrics
             mlflow.log_metric('neg_elbo_value', avg_train_loss)
 
@@ -99,14 +115,14 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
             with torch.no_grad():
                 for data in val_loader:
                     data = data.to(device)
-                    loss = model(data, reduction='avg')
+                    reconstruction_loss_value, kl_value = model(data, reduction='avg')
+                    loss = reconstruction_loss_value + kl_value
+
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
                         raise optuna.exceptions.TrialPruned()
                     val_loss_accum += loss.item()
             avg_val_loss = val_loss_accum / len(val_loader)
-            # log metrics
-            mlflow.log_metric('neg_elbo_value_val', avg_val_loss)
 
             epoch_duration = time.time() - epoch_start_time
             print(
@@ -132,10 +148,13 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
 
     # Execute optuna optimizer study
     print('train VAE')
-    study = optuna.create_study(direction='minimize')
-    study.optimize(train_model, n_trials=50)
+    study_name = "malicious_traffic_latent_variable_gan"  # Unique identifier of the study.
+    storage_name = "sqlite:///{}.db".format(study_name)
+    study = optuna.create_study(study_name= study_name, storage=storage_name, load_if_exists=True, direction='minimize')
+    study.optimize(train_model, n_trials=150)
     # Get Best parameters
     best_params = study.best_params
     print('best params: {}'.format(best_params))
     mlflow.log_param('vae_params', str(best_params))
+    mlflow.log_metric("best_elbo", study.best_value)
 

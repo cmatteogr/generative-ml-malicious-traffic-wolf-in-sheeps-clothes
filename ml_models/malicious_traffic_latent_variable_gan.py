@@ -7,58 +7,9 @@ import torch.nn as nn
 import mlflow
 
 # --- Example Usage ---
-D = 42  # input dimension
-L = 15   # number of latents
-M = 38  # hidden layer dimension
-
-"""
-The architecture has constant dimension in the hidden layers, this is intentional:
-
-Advantages:
-* Hidden Layers are for Feature Transformation: hidden layers focus on feature transformations and not on reduction.
-* Simplicity: only focus on M,D and L values. not on the dimension for each layer D-> (M1,M2,M3, ... Mn)->L
-
-Disadvantages:
-* Computational Cost: More parameters to train more computation/time is needed. Depends on M value.
-* Inefficiency in Parameters: From M to L, just before the latent space the parameters needed could be larger or smaller. Generating inefficiency
-* Less Explicit Hierarchical Feature Learning: The learning works on a hierarchical way through the layers-neurons. The same number of dimension for all layer it.  
-"""
-
-
-# Define Encoder Network
-encoder_net = nn.Sequential(
-    nn.Linear(D, M),
-    nn.ReLU(), # Changed to ReLU, common choice
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    # NOTE: This last layer is the Encoder returns twice the latent space dimension L because it returns Mean - Standard Derivation, to generate Gaussian representations
-    # VAE architecture: https://youtu.be/qJeaCHQ1k2w?t=799
-    # Generative Deep Learning Book: Variational Autoencoders - The Encoder: page 135
-    nn.Linear(M, 2 * L) # Output mu and log_var
-)
-
-# Define Decoder Network
-# Output size must be D for continuous data (predicting the mean)
-decoder_net = nn.Sequential(
-    nn.Linear(L, M), # The Latent space of the decoder is connected to the z representation after use the reparameterization trick to transform (Mean - Standard Derivation) to z
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, M),
-    nn.ReLU(),
-    nn.Linear(M, D),
-    # The input data is normalized to [0, 1], to use Sigmoid to force the same output normalization
-    nn.Sigmoid()
-)
-
+D = 42  # input dimension by default
+L = 22   # number of latents by default
+M = 36  # hidden layer dimension bu default
 
 # Use math.pi for scalar, torch.pi for tensors if needed later
 PI = torch.tensor(math.pi)
@@ -227,10 +178,55 @@ class Prior(nn.Module):
 
 class VAE(nn.Module):
     """Variational Autoencoder (VAE) model for Continuous Data."""
-    def __init__(self, L=16):
+    def __init__(self, input_dim=D, latent_dim=L, hidden_dim=M):
         super(VAE, self).__init__()
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
 
         print('VAE (Continuous Likelihood - Gaussian Mean Decoder) Initialized.')
+
+        """
+        The architecture has constant dimension in the hidden layers, this is intentional:
+
+        Advantages:
+        * Hidden Layers are for Feature Transformation: hidden layers focus on feature transformations and not on reduction.
+        * Simplicity: only focus on M,D and L values. not on the dimension for each layer D-> (M1,M2,M3, ... Mn)->L
+
+        Disadvantages:
+        * Computational Cost: More parameters to train more computation/time is needed. Depends on M value.
+        * Inefficiency in Parameters: From M to L, just before the latent space the parameters needed could be larger or smaller. Generating inefficiency
+        * Less Explicit Hierarchical Feature Learning: The learning works on a hierarchical way through the layers-neurons. The same number of dimension for all layer it.  
+        """
+
+        # Define Encoder Network
+        encoder_net = nn.Sequential(
+            nn.Linear(self.input_dim, self.hidden_dim),
+            nn.ReLU(),  # Changed to ReLU, common choice
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            # NOTE: This last layer is the Encoder returns twice the latent space dimension L because it returns Mean - Standard Derivation, to generate Gaussian representations
+            # VAE architecture: https://youtu.be/qJeaCHQ1k2w?t=799
+            # Generative Deep Learning Book: Variational Autoencoders - The Encoder: page 135
+            nn.Linear(self.hidden_dim, 2 * self.latent_dim)  # Output mu and log_var
+        )
+
+        # Define Decoder Network
+        # Output size must be D for continuous data (predicting the mean)
+        decoder_net = nn.Sequential(
+            nn.Linear(self.latent_dim, self.hidden_dim),
+            # The Latent space of the decoder is connected to the z representation after use the reparameterization trick to transform (Mean - Standard Derivation) to z
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.input_dim),
+            # The input data is normalized to [0, 1], to use Sigmoid to force the same output normalization
+            nn.Sigmoid()
+        )
 
         # init encoder and decoder
         self.encoder = Encoder(encoder_net=encoder_net)
@@ -238,10 +234,10 @@ class VAE(nn.Module):
         # init prior, prior is the previous hypothesis based on the Bayes Theorem
         # https://youtu.be/HZGCoVF3YvM?t=317
         # in our case the hypothesis is the Standard Gaussian distribution in the latent space
-        self.prior = Prior(L=L)
+        self.prior = Prior(L=latent_dim)
 
         # latent space dimension
-        self.L = L
+        self.L = latent_dim
 
     def forward(self, x, reduction='avg'):
         """Calculates the negative Evidence Lower Bound (ELBO) loss.
@@ -295,16 +291,20 @@ class VAE(nn.Module):
         # Now, ELBO is the sum of both terms, MSE and KL Divergence, the goal is minimize this metric, that way we ensure
         # the VAE reconstructs the x instances as well as possible and Maps as good as possible the input distribution and the latent distribution (Gaussian like)
         # Remember using an approximation and the function depends on the VAE parameters, it means weights.
-        neg_elbo = reconstruction_loss + KL   # Shape: (batch_size,)
+        #neg_elbo = reconstruction_loss + KL   # Shape: (batch_size,)
 
         # Return average or sum of negative ELBO (loss to be minimized)
         # We are using batches so it make sense
         if reduction == 'sum':
-            neg_elbo_value = neg_elbo.sum()
+            reconstruction_loss_value = reconstruction_loss.sum()
+            kl_value = KL.sum()
+            # neg_elbo_value = neg_elbo.sum()
         else:
-            neg_elbo_value = neg_elbo.mean()
+            reconstruction_loss_value = reconstruction_loss.mean()
+            kl_value = KL.mean()
+            # neg_elbo_value = neg_elbo.mean()
 
-        return neg_elbo_value
+        return reconstruction_loss_value, kl_value
 
 
     def sample(self, batch_size=64):
