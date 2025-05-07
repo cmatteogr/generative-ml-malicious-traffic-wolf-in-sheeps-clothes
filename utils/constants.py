@@ -4,10 +4,10 @@ constants
 VALID_TRAFFIC_TYPES = [
     'BENIGN',
     'DoS Hulk',
-    'PortScan',
+    #'PortScan',
     'DDoS',
-    'DoS GoldenEye',
-    'FTP-Patator'
+    #'DoS GoldenEye',
+    #'FTP-Patator'
 ]
 
 VALID_PORT_RANGE = (0, 65535)

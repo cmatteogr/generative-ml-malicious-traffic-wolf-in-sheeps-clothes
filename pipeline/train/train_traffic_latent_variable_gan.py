@@ -37,6 +37,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
     # NOTE: This feature may be needed in the future to build the CGAN
     # traffic_df.pop('Label')
     n_features = len(traffic_df.columns)
+    print(f"Training dataset, {n_features} features")
     tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32)
 
     # Split into training and validation sets
@@ -52,6 +53,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
     # Init the autoencoder Hyperparameters
     num_epochs = 300
     early_stopping_patience = 15
+    kl_beta = 0.25
 
     # Build the model tunner using optuna
     print('build VAE for generation model')
@@ -89,6 +91,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
                 optimizer.zero_grad()
 
                 reconstruction_loss_value, kl_value = model(data, reduction='avg')  # Use average loss over batch
+                kl_value = kl_value * kl_beta
                 loss = reconstruction_loss_value + kl_value
 
                 loss.backward()
@@ -104,7 +107,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
             avg_reconstruction_loss = reconstruction_loss_accum / len(train_loader)
             avg_kl_loss = kl_loss_accum / len(train_loader)
 
-            print(f'train MSE: {avg_reconstruction_loss}, train KL-divergence: {avg_kl_loss}')
+            print(f'train MSE: {avg_reconstruction_loss}, train KL-divergence: {avg_kl_loss/kl_beta}, train KL-divergence Beta:{avg_kl_loss}')
 
             # log metrics
             mlflow.log_metric('neg_elbo_value', avg_train_loss)

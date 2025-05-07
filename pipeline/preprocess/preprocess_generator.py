@@ -217,6 +217,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     joblib.dump(pt_model, power_transformer_filepath)
     print(f"PowerTransformer saved to {power_transformer_filepath}")
 
+    label_train = X_train['Label']
+    label_test = X_test['Label']
+
     # --- 7. Feature Encoding: One-Hot Encoding ---
     print('Applying One-Hot Encoding for port categories...')
     one_hot_encoding_columns = ['Source Port', 'Destination Port', 'Label']
@@ -294,6 +297,9 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # Re-attach labels temporarily for sampling
     X_train_temp = X_train.copy()  # Work on a copy
 
+    X_train_temp['Label'] = label_train
+    X_test['Label'] = label_test
+
     x_train_traffic_df_list = []
     for valid_traffic_type in valid_traffic_types:
         # Filter by type
@@ -326,6 +332,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
     # Keep the original (but filtered) test set
     test_traffic_df = X_test.copy()
+
+    mlflow.log_param("final_preprocess_columns", str(list(X_train_sampled.columns)))
 
     # --- 11. Save Preprocessed Data ---
     print('Saving preprocessed data...')
