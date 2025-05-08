@@ -217,12 +217,15 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     joblib.dump(pt_model, power_transformer_filepath)
     print(f"PowerTransformer saved to {power_transformer_filepath}")
 
-    label_train = X_train['Label']
-    label_test = X_test['Label']
+    #label_train = X_train['Label']
+    #label_test = X_test['Label']
+    label_train = X_train.pop('Label')
+    label_test = X_test.pop('Label')
 
     # --- 7. Feature Encoding: One-Hot Encoding ---
     print('Applying One-Hot Encoding for port categories...')
-    one_hot_encoding_columns = ['Source Port', 'Destination Port', 'Label']
+    #one_hot_encoding_columns = ['Source Port', 'Destination Port', 'Label']
+    one_hot_encoding_columns = ['Source Port', 'Destination Port']
     # Ensure columns exist
     one_hot_encoding_columns = [col for col in one_hot_encoding_columns if col in X_train.columns]
     # Initialize OneHotEncoder

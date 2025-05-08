@@ -53,7 +53,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
     # Init the autoencoder Hyperparameters
     num_epochs = 300
     early_stopping_patience = 15
-    kl_beta = 0.25
+    kl_beta = 0.2
 
     # Build the model tunner using optuna
     print('build VAE for generation model')
@@ -119,6 +119,7 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
                 for data in val_loader:
                     data = data.to(device)
                     reconstruction_loss_value, kl_value = model(data, reduction='avg')
+                    kl_value = kl_value * kl_beta
                     loss = reconstruction_loss_value + kl_value
 
                     if torch.isnan(loss):  # Check for NaN loss
@@ -151,9 +152,12 @@ def train(traffic_data_filepath: str, train_size_percentage=0.8, batch_size=1024
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan"  # Unique identifier of the study.
+    study_name = "malicious_traffic_latent_variable_gan_v3"  # Unique identifier of the study.
     storage_name = "sqlite:///{}.db".format(study_name)
-    study = optuna.create_study(study_name= study_name, storage=storage_name, load_if_exists=True, direction='minimize')
+    study = optuna.create_study(study_name= study_name,
+                                storage=storage_name,
+                                load_if_exists=True,
+                                direction='minimize', )
     study.optimize(train_model, n_trials=150)
     # Get Best parameters
     best_params = study.best_params
