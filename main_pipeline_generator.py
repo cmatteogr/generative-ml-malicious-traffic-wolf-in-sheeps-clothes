@@ -37,4 +37,4 @@ with mlflow.start_run() as run:
     # --- Training Step ---
     # Train the traffic classifier model using the preprocessed training data
     # It returns the file path to the saved trained model artifact
-    model_filepath = train(traffic_data_filepath=train_traffic_filepath, batch_size=131072)
+    model_filepath = train(results_folder_path=results_folder_path, traffic_data_filepath=train_traffic_filepath, batch_size=131072)

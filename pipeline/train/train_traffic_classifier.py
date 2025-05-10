@@ -12,7 +12,7 @@ from skopt.space import Real, Categorical, Integer
 import pandas as pd
 import os
 
-from utils.constants import TRAFFIC_CLASSIFICATION_MODEL_FILENAME
+from utils.constants import TRAFFIC_CLASSIFIER_MODEL_FILENAME
 from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
 
 
@@ -76,7 +76,7 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
     mlflow.log_artifact(confusion_matrix_plot_filepath)
 
     # save model
-    model_filepath = os.path.join(results_folder_path, TRAFFIC_CLASSIFICATION_MODEL_FILENAME)
+    model_filepath = os.path.join(results_folder_path, TRAFFIC_CLASSIFIER_MODEL_FILENAME)
     best_model.save_model(model_filepath)
     # log model as artifact
     mlflow.log_artifact(model_filepath)
