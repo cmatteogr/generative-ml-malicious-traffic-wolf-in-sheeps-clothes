@@ -185,12 +185,12 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # Early stopping is added to avoid overfitting
-    early_stopping = EarlyStopping(patience=early_stopping_patience)
+    early_stopping = EarlyStopping(patience=early_stopping_patience*2)
 
     # Training loop
     print(f'Training Beta-VAE. Best params: {best_params}')
     best_val_loss = float('inf')
-    for epoch in range(num_epochs):
+    for epoch in range(num_epochs * 2):
         epoch_start_time = time.time()
         model.train()
         train_loss_accum = 0.0
@@ -265,7 +265,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         # Track best validation loss for this trial
         best_val_loss = min(best_val_loss, avg_val_loss)
 
-    print(f'reconstruction error, best score: {best_val_loss:.8f}')
+    print(f'ELBO, best score: {best_val_loss:.8f}')
     # Build train report
     print('create training report dict')
     report_dict = {
