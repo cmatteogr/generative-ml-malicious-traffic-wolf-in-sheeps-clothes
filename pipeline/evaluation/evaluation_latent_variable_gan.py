@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from ml_models.malicious_traffic_latent_variable_gan import VAE
 import plotly.express as px
 from sklearn.decomposition import PCA
+from ydata_profiling import ProfileReport
+
 
 
 def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_filepath: str, results_folder_path: str) -> dict:
@@ -47,32 +49,19 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     model.load_state_dict(torch.load(model_filepath))
 
     # set model to evaluation mode
-    eval_reconstruction_loss_accum = 0.0
-    eval_kl_accum = 0.0
-    eval_loss_accum = 0.0
-    with torch.no_grad():
-        for data in evaluation_loader:
-            data = data.to(device)
-            reconstruction_loss_value, kl_value = model(data, reduction='avg')
-            # NOTE: This KL Beta term could be calculated inside the VAE class,
-            # It's here because we want to track the results via MLFlow
-            # With more time it's possible to generate a clean code for this
-            kl_value = kl_value * kl_beta
-            loss = reconstruction_loss_value + kl_value
-            # add the evaluation ELBO error by batch
-            eval_loss_accum += loss.item()
-            eval_kl_accum += kl_value.item()
-            eval_reconstruction_loss_accum += reconstruction_loss_value.item()
-
+    reconstruction_loss_value, kl_value = model(tensor_data, reduction='avg')
+    reconstruction_loss_value = reconstruction_loss_value.item()
+    kl_value = kl_value.item()
+    eval_loss_elbo = reconstruction_loss_value + kl_value
     # Calculate the ELBO, KL Divergence value and MSE averages value
-    avg_eval_loss = eval_loss_accum / len(evaluation_loader)
-    avg_eval_kl = eval_kl_accum / len(evaluation_loader)
-    avg_eval_reconstruction_loss = eval_reconstruction_loss_accum / len(evaluation_loader)
+    avg_eval_loss = eval_loss_elbo / len(evaluation_loader)
+    avg_eval_kl = (kl_value / len(evaluation_loader)) / kl_beta
+    avg_eval_reconstruction_loss = reconstruction_loss_value / len(evaluation_loader)
 
     # log metrics
-    mlflow.log_metric("eval/neg_elbo_value", avg_eval_loss)
-    mlflow.log_metric("eval/kl_divergence_value", avg_eval_kl)
-    mlflow.log_metric("eval/mse_val_value", avg_eval_reconstruction_loss)
+    #mlflow.log_metric("eval/neg_elbo_value", avg_eval_loss)
+    #mlflow.log_metric("eval/kl_divergence_value", avg_eval_kl)
+    #mlflow.log_metric("eval/mse_val_value", avg_eval_reconstruction_loss)
 
     # NOTE: There are different ways to measure the VAE performance. We will apply 3 related to measure
     # the reconstruction performance and the latent space consistency
@@ -88,7 +77,7 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     # Apply PCA or select 3 dimensions randomly to show our latent space is a Gaussian like distribution
     # reduce the latent space dimensionality to plot the latent space representation
     pca = PCA(n_components=3)
-    z_transformed_pca = pca.fit_transform(z)
+    z_transformed_pca = pca.fit_transform(z.detach().numpy())
     plot_cols_pca = ['PCA1', 'PCA2', 'PCA3']
     plot_title_pca = 'VAE Latent Space (PCA - 3 Components)'\
     # plot the latent space in 3D
@@ -105,5 +94,19 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     # save plot
     latent_space_pca_filepath = os.path.join(results_folder_path, "vae_latent_space_pca.html")
     fig_pca.write_html(latent_space_pca_filepath)
-    mlflow.log_artifact(latent_space_pca_filepath, "vae_latent_space_plots")
-    print(f"Saved VAE latent space PCA plot to {latent_space_pca_filepath}")
+    #mlflow.log_artifact(latent_space_pca_filepath, "vae_latent_space_plots")
+
+    # Use ydata-profiling to compare input and generated data
+    original_data_report = ProfileReport(traffic_df, title="Original data")
+    # sample data from the VAE
+    z = model.encoder.sample(tensor_data)
+    generated_data = model.decoder.sample(z)
+    # transform data to dataframe
+    generated_data_df = pd.DataFrame(generated_data.detach().numpy(), columns=traffic_df.columns)
+    # generate report with generated data
+    generated_data_report = ProfileReport(generated_data_df, title="Generated data")
+    # compare reports, original data and generated data
+    comparison_report = original_data_report.compare(generated_data_report)
+    original_data_vs_generated_data_filepath = os.path.join(results_folder_path, "original_data_vs_generated_data.html")
+    comparison_report.to_file(original_data_vs_generated_data_filepath)
+

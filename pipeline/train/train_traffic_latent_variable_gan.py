@@ -40,7 +40,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     traffic_df = pd.read_csv(traffic_data_filepath)
     # remove label column
     # NOTE: This feature may be needed in the future to build the CGAN
-    traffic_df.pop('Label')
+    # traffic_df.pop('Label')
     n_features = len(traffic_df.columns)
     print(f"Training dataset, {n_features} features")
     tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32)
@@ -166,7 +166,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=1)
+    study.optimize(train_model, n_trials=50)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value

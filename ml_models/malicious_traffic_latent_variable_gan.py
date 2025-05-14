@@ -4,7 +4,7 @@ VAE for Continuous Data using Gaussian Likelihood (Implicit Fixed Variance via M
 import math # Use math.pi
 import torch
 import torch.nn as nn
-import mlflow
+import numpy as np
 
 # --- Example Usage ---
 D = 42  # input dimension by default
@@ -317,3 +317,25 @@ class VAE(nn.Module):
         z = self.prior.sample(batch_size=batch_size)
         # Decode z to get the mean reconstruction x' = E[p(x|z)]
         return self.decoder.sample(z)
+
+    def interpolation(self, x1=None, x2=None, z1=None, z2=None, num_steps=10):
+        """Generates new samples x' by sampling z ~ p(z) and decoding."""
+        # check if x1 and x2 were provided, z1 and z2 exclusive
+        if (x1 is None) and (x2 is None) and (z1 is None) and (z2 is None):
+            raise Exception(f"Provide at least x1, x2 or z1, z2.")
+        # check exclusive condition
+        if ((x1 is not None) and (x2 is not None)) and ((z1 is not None) and (z2 is not None)):
+            raise Exception(f"Provide only x1, x2 or z1, z2, not both.")
+
+        # if x1 and x2 were provide calculate the z representations
+        if (x1 is None) and (x2 is None):
+            z1 = self.encoder.sample(x=x1)
+            z2 = self.encoder.sample(x=x1)
+
+        # Apply interpolation
+        for alpha_val in np.linspace(0, 1, num_steps):
+            z_interp = (1 - alpha_val) * z1 + alpha_val * z2
+            with torch.no_grad():
+                interpolated_sample = self.decoder.sample(z_interp)
+                return interpolated_sample
+
