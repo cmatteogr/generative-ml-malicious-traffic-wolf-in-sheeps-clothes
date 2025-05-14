@@ -94,7 +94,7 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     # save plot
     latent_space_pca_filepath = os.path.join(results_folder_path, "vae_latent_space_pca.html")
     fig_pca.write_html(latent_space_pca_filepath)
-    #mlflow.log_artifact(latent_space_pca_filepath, "vae_latent_space_plots")
+    #mlflow.log_artifact(latent_space_pca_filepath)
 
     # Use ydata-profiling to compare input and generated data
     original_data_report = ProfileReport(traffic_df, title="Original data")
@@ -109,4 +109,7 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     comparison_report = original_data_report.compare(generated_data_report)
     original_data_vs_generated_data_filepath = os.path.join(results_folder_path, "original_data_vs_generated_data.html")
     comparison_report.to_file(original_data_vs_generated_data_filepath)
+    # save report in artifacts
+    #mlflow.log_artifact(original_data_vs_generated_data_filepath)
+
 
