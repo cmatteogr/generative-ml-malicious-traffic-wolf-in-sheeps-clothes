@@ -3,7 +3,7 @@ traffic classifier pipeline
 """
 import mlflow
 from pipeline.preprocess.preprocess_generator import preprocessing
-from pipeline.train.train_traffic_latent_variable_gan import train
+from pipeline.train.train_traffic_latent_variable_gan_b_vae import train
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE
 
 # Set the MLflow tracking server URI to log experiments and models

@@ -1,23 +1,25 @@
 """
-VAE for Continuous Data using Gaussian Likelihood (Implicit Fixed Variance via MSE)
+Beta - Total Correlation Variational Autoencoder. b-tcvae
 """
 import math # Use math.pi
 import torch
 import torch.nn as nn
 import numpy as np
 
-# --- Example Usage ---
 D = 42  # input dimension by default
 L = 22   # number of latents by default
 M = 36  # hidden layer dimension bu default
 
 # Use math.pi for scalar, torch.pi for tensors if needed later
 PI = torch.tensor(math.pi)
-# --- Log Probability Functions ---
-# log_categorical is removed as it's no longer needed
 
 def log_normal_diag(x, mu, log_var, reduction=None, dim=None):
     """Calculates log probability log N(x|mu, diag(exp(log_var))) of diagonal Gaussian."""
+    # Calculates the log probability density of x given a Gaussian distribution, How probably you can find x in that distribution
+    # This value is used as part of the KL Divergence metric, we are looking for to increase this probability value, that way
+    # we are "mapping" the x inputs with their z-Gaussian like representations.
+    # NOTE: We are using logs to simplify the calculation fue the logs properties, instead of multiplications they are sums
+    # NOTE: The Diagonal name is because all the off-diagonal elements are zero. This implies that the different dimensions of x are uncorrelated.
     log_p = -0.5 * torch.log(2. * PI) - 0.5 * log_var - 0.5 * torch.exp(-log_var) * (x - mu)**2.
     # Sum over feature dimension D by default (usually dim=1)
     if dim is None:
@@ -49,7 +51,162 @@ def log_standard_normal(x, reduction=None, dim=None):
     else: # No reduction
         return log_p
 
-# --- Encoder ---
+
+def log_q_zd_given_xk_all_dim(z, mu_e, log_var_e):
+    """
+    Estimate log q(z_j). We need to calculate the log q(z_j) where j represent the dimensions for all the instances that comes from the input z
+
+    :param z: Samples from q(z|x), shape (batch_size, latent_dim).
+    :param mu_e: Mean of q(z|x) from encoder, shape (batch_size, latent_dim).
+    :param log_var_e: Log variance of q(z|x) from encoder, shape (batch_size, latent
+    :return: torch.Tensor: Log q(z_j) for all x in all dimensions
+
+    """
+    # the mathematical definition is:
+    # log_q_zd_given_xk_all_d[i, k, d] = log N(z[i,d] | mu_e[k,d], exp(log_var_e[k,d])). This is equal to
+    # log_q_zd_given_xk_all_d[i, k, d] = - 1/2 log(2π) − 1/2 log_var − 1/2 exp(−log_var)(z−μ)**2
+    # This formula allow us to calculate the log probability density in the instance z, we are calculating how likely the given z value is
+
+    #  unsqueeze method:  https://docs.pytorch.org/docs/stable/generated/torch.unsqueeze.html
+    log_q_zd_given_xk_all_d = -0.5 * torch.log(2. * PI.to(z.device)) \
+                              - 0.5 * log_var_e.unsqueeze(0) \
+                              - 0.5 * torch.exp(-log_var_e.unsqueeze(0)) * \
+                              (z.unsqueeze(1) - mu_e.unsqueeze(0)) ** 2
+    return log_q_zd_given_xk_all_d
+
+def calculate_mutual_information(z, mu_e, log_var_e):
+    """
+    Calculates the Mutual Information term: I(x;z) approx KL(q(z|x) || q(z)).
+    This is E_q(z|x)[log q(z|x) - log q(z)].
+
+    Using this metric we can identify how much information the channel, latent space keeps from the input x
+    https://medium.com/swlh/a-deep-conceptual-guide-to-mutual-information-a5021031fad0
+
+    :param z: Samples from q(z|x), shape (batch_size, latent_dim).
+    :param mu_e: Mean of q(z|x) from encoder, shape (batch_size, latent_dim).
+    :param log_var_e: Log variance of q(z|x) from encoder, shape (batch_size, latent
+    :return: torch.Tensor: Scalar value of the estimated mutual information between z and x.
+
+    """
+    batch_size, _ = z.shape
+
+    # log q(z|x)
+    # log_qzx[i] = log q(z_i | x_i)
+    log_qzx = log_normal_diag(z, mu_e, log_var_e, reduction='sum', dim=1)  # Shape: (batch_size,)
+
+    # Estimate log q(z)
+    # log_q_z_given_xj_matrix[i, j] = log q(z_i | x_j)
+    # z_i is z[i,:], x_j corresponds to mu_e[j,:], log_var_e[j,:]
+    #  unsqueeze method:  https://docs.pytorch.org/docs/stable/generated/torch.unsqueeze.html
+    # .unsqueeze(1) gives (batch_size, 1, latent_dim)
+    # .unsqueeze(0) gives (1, batch_size, latent_dim)
+    # After expansion, inputs to log_normal_diag are (batch_size, batch_size, latent_dim)
+    # log_normal_diag sums over dim=2 (latent_dim)
+    log_q_z_given_xj_matrix = log_normal_diag(
+        z.unsqueeze(1).expand(batch_size, batch_size, -1),
+        mu_e.unsqueeze(0).expand(batch_size, batch_size, -1),
+        log_var_e.unsqueeze(0).expand(batch_size, batch_size, -1),
+        reduction='sum',
+        dim=2
+    )
+    # log q(z_i) = log (1/N * sum_j q(z_i | x_j))
+    #            = logsumexp_j (log q(z_i | x_j)) - log N
+    log_qz = torch.logsumexp(log_q_z_given_xj_matrix, dim=1) - math.log(batch_size)  # Shape: (batch_size,)
+
+    # MI = E_q(z|x) [log q(z|x) - log q(z)]
+    # Approximated by mean over the batch.
+    mi = (log_qzx - log_qz).mean()
+    return mi
+
+
+def calculate_total_correlation(z, mu_e, log_var_e):
+    """
+    Calculates the Total Correlation term: TC = KL(q(z) || prod_j q(z_j)).
+    This is E_q(z) [log q(z) - sum_j log q(z_j)]. https://youtu.be/RNAZA7iytNQ?t=890
+    This formula is based on the Total Correlation concept: https://dit.readthedocs.io/en/latest/measures/multivariate/total_correlation.html#:~:text=The%20total%20correlation%20consists%20of,variables%20it%20is%20shared%20among.
+
+    With this metrics we are looking for to reduce the dimension dependency (redundancy) in the latent space, promoting the disentanglement
+    Each dimension is independent from each others, we can achieve that if the log q(z) is similar/equal to the Sum of all the log q(z_j), where j represent the latent space dimensions
+    https://youtu.be/RNAZA7iytNQ?t=543
+
+    :param z: Samples from q(z|x), shape (batch_size, latent_dim).
+    :param mu_e: Mean of q(z|x) from encoder, shape (batch_size, latent_dim).
+    :param log_var_e: Log variance of q(z|x) from encoder, shape (batch_size, latent
+    :return: torch.Tensor: Scalar value of the estimated total correlation.
+    """
+    batch_size, latent_dim = z.shape
+
+    # Estimate log q(z) - same as in MI calculation
+    # log_q_z_given_xj_matrix[i, j] = log q(z_i | x_j)
+    log_q_z_given_xj_matrix = log_normal_diag(
+        z.unsqueeze(1).expand(batch_size, batch_size, -1),
+        mu_e.unsqueeze(0).expand(batch_size, batch_size, -1),
+        log_var_e.unsqueeze(0).expand(batch_size, batch_size, -1),
+        reduction='sum',
+        dim=2
+    )
+    log_qz = torch.logsumexp(log_q_z_given_xj_matrix, dim=1) - math.log(batch_size)
+
+    # This is the same to what we did in the log_q_zd_given_xk_all_d in the calculate_dimension_wise_kl function.
+    # check the explanation there. We use it to Estimate log q(z_j).
+    log_q_zd_given_xk_all_d = log_q_zd_given_xk_all_dim(z, mu_e, log_var_e)
+    log_q_zd = torch.logsumexp(log_q_zd_given_xk_all_d, dim=1) - math.log(batch_size)
+
+    # sum_j log q(z_j) for each sample i in batch (sum over latent dimensions d)
+    sum_log_q_zd = log_q_zd.sum(dim=1)
+
+    # TC = E_q(z) [log q(z) - sum_j log q(z_j)]
+    # Expectation approximated by mean over the batch.
+    tc = (log_qz - sum_log_q_zd).mean()
+    return tc
+
+
+def calculate_dimension_wise_kl(z, mu_e, log_var_e):
+    """
+    Calculates the Dimension-wise KL term: sum_j KL(q(z_j) || p(z_j)).
+
+    NOTE: The Dimension-wise KL term is named so because it specifically measures how much each individual dimension of the aggregated latent distribution qϕ(z_j)
+    deviates from its designated prior p(z_j))
+
+    This is sum_j E_q(z_j) [log q(z_j) - log p(z_j)]. E_q is the expectation of a random Variable
+    check the following videos to understand what a Expectation of a rando variable is and How is it applied using the Jensen Inequality:
+    * Expectation of a random variable: https://www.youtube.com/watch?v=sheoa3TrcCI
+    * Jensen's Inequality: https://www.youtube.com/watch?v=u0_X2hX6DWE. The book Deep Generative Modeling shows in detail how it works
+    :param z: Samples from q(z|x), shape (batch_size, latent_dim).
+    :param mu_e: Mean of q(z|x) from encoder, shape (batch_size, latent_dim).
+    :param log_var_e: Log variance of q(z|x) from encoder, shape (batch_size, latent
+    :return: torch.Tensor: Scalar value of the estimated dimension-wise KL.
+    """
+    batch_size, latent_dim = z.shape
+
+    # So we need to calculate log q(z_j) and log p(z_j).
+    # p(z_j) is the Prior distribution, in our case the Gaussian distribution
+    # q(z_j) is a family of Gaussian distributions used to approximate the Prior p(z_j), q(z_j) is in function of VAE model parameters ϕ
+    # We apply KL Divergence to measure how different they are: https://www.youtube.com/watch?v=SxGYPqCgJWM
+
+    # Estimate log q(z_j). We need to calculate the log q(z_j) where j represent the dimensions for all the instances that comes from the input z
+    log_q_zd_given_xk_all_d = log_q_zd_given_xk_all_dim(z, mu_e, log_var_e)
+    # sum all the q(zj) contributions (integrate) from all the samples given x_j
+    # The command torch.logsumexp, returns the log of summed exponentials of each row of the input:
+    # - https://docs.pytorch.org/docs/stable/generated/torch.logsumexp.html
+    log_q_zd = torch.logsumexp(log_q_zd_given_xk_all_d, dim=1) - math.log(batch_size)
+
+    # log p(z_j) = log N(z_j | 0, 1)
+    # z has shape (batch_size, latent_dim).
+    # log_standard_normal(z, reduction=None) will give element-wise log N(z[i,j]|0,1)
+    log_pz_j = log_standard_normal(z)
+
+    # Now we can calculate the KL divergence between q(z_j) and p(z_j)
+    # KL_j = E_q(z_j) [log q(z_j) - log p(z_j)]
+    # Expectation E_q(z_j) is approximated by mean over batch samples of z_j.
+    # So for each dimension j (latent_dim), KL_j = mean_i (log_q_zd[i,j] - log_pz_j[i,j])
+    kl_j_per_sample = log_q_zd - log_pz_j
+    kl_j = kl_j_per_sample.mean(dim=0)
+
+    # sum_j KL_j
+    dwkl = kl_j.sum()
+    return dwkl
+
 
 class Encoder(nn.Module):
     """Encodes input x into latent space parameters (mu, log_var)."""
@@ -267,18 +424,18 @@ class VAE(nn.Module):
         # We use -SumSqError which is proportional to log p(x|z) for fixed variance Gaussian
         log_px_given_z = self.decoder.log_prob(x, z) # Shape: (batch_size,)
 
-        # KL Divergence Term: KL(q(z|x) || p(z))
-        # KL = E_q[log q(z|x) - log p(z)]
-        # This one is the log q(z|x), in the 'Deep Generative Modeling' is denoted as ln qφ(z).
-        # ln qφ(z) is the probability density of z given by a specific distribution (parameterized by ϕ) chosen from a family of distributions (e.g., Gaussian).
-        # We are approximating to the 'posterior' qϕ(z∣x) is designed to approximate the true posterior distribution p(z∣x)
-        # NOTE: remember qϕ(z∣x) is an approximation of p(z∣x), the approximation is needed due: https://youtu.be/iwEzwTTalbg?t=602
-        log_qzx = self.encoder.log_prob(z, mu_e, log_var_e) # Shape: (batch_size,)
-        # This one is log p(z), in the 'Deep Generative Modeling' is denoted as ln p(z).
-        # Denotes the latent space shape given z, assuming a Gaussian Like distribution
-        log_pz = self.prior.log_prob(z)                   # Shape: (batch_size,)
-        # KL Divergence is calculated subtracting the distributions probabilities, the approximation qϕ(z∣x) and the prior hypothesis p(z), assuming a Gaussian distribution
-        KL = log_qzx - log_pz                             # Shape: (batch_size,)
+        # Instead of the KL divergence like in the b-VAE
+        # we use 3 metrics to guarantee:
+        # 1. The information transmission (Mutual Information).
+        # 2. Latent space disentanglement (Total Correlation)
+        # 3. The Prio and Posterior correlation in each dimension (Dimension-wise KL)
+
+        # Calculate Mutual information
+        mi = calculate_mutual_information(z, mu_e, log_var_e)
+        # Calculate total correlation
+        tc = calculate_total_correlation(z, mu_e, log_var_e)
+        # Calculate Dimension-wise KL
+        dw_kl = calculate_dimension_wise_kl(z, mu_e, log_var_e)
 
         # ELBO = E_q[log p(x|z)] - KL(q(z|x) || p(z))
         # elbo = log_px_given_z - KL # Shape: (batch_size,)
@@ -287,11 +444,11 @@ class VAE(nn.Module):
         # If log_px_given_z = -SumSqError, then -ELBO = KL + SumSqError
         # This matches the common VAE loss: Reconstruction Loss + KL Divergence
         # Let's define Reconstruction Loss = -log_px_given_z
-        reconstruction_loss = -log_px_given_z # Shape: (batch_size,)
+        reconstruction_loss = -log_px_given_z
         # Now, ELBO is the sum of both terms, MSE and KL Divergence, the goal is minimize this metric, that way we ensure
         # the VAE reconstructs the x instances as well as possible and Maps as good as possible the input distribution and the latent distribution (Gaussian like)
         # Remember using an approximation and the function depends on the VAE parameters, it means weights.
-        #neg_elbo = reconstruction_loss + KL   # Shape: (batch_size,)
+        #neg_elbo = reconstruction_loss + KL
 
         # encoder
         mu_e, log_var_e = self.encoder.encode(x)
@@ -299,16 +456,14 @@ class VAE(nn.Module):
 
         # Return average or sum of negative ELBO (loss to be minimized)
         # We are using batches so it make sense
+        # TODO: Check if the MI, TC and DW_KL could have this sum and average effect, for now in both return the same value
         if reduction == 'sum':
             reconstruction_loss_value = reconstruction_loss.sum()
-            kl_value = KL.sum()
-            # neg_elbo_value = neg_elbo.sum()
         else:
             reconstruction_loss_value = reconstruction_loss.mean()
-            kl_value = KL.mean()
-            # neg_elbo_value = neg_elbo.mean()
 
-        return reconstruction_loss_value, kl_value
+        # return all the metrics
+        return reconstruction_loss_value, mi, tc, dw_kl
 
 
     def sample(self, batch_size=64):

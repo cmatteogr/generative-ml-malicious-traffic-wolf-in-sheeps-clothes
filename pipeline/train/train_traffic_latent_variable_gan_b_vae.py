@@ -13,7 +13,7 @@ import time
 import json
 from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
-from ml_models.malicious_traffic_latent_variable_gan import VAE
+from ml_models.malicious_traffic_latent_variable_gan_b_vae import VAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 
 
