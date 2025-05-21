@@ -10,16 +10,15 @@ import pandas as pd
 import mlflow
 import os
 import time
-import json
 from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
-from ml_models.malicious_traffic_latent_variable_gan_b_vae import VAE
+from ml_models.malicious_traffic_b_tcvae import VAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 
 
 def train(traffic_data_filepath: str, results_folder_path: str, train_size_percentage=0.8, batch_size=1024):
     """
-    Beta-VAE training
+    Beta - Total Correlation VAE training
 
     :param traffic_data_filepath: Traffic dataset
     :param results_folder_path: Folder path where save the results
@@ -27,14 +26,14 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     :param batch_size: Batch size
     :return:
     """
-    print('# Start VAE training')
+    print('# Start Beta - Total Correlation VAE training')
 
     # Check input arguments
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
 
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cpu")
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
@@ -73,7 +72,17 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-2, log=True)
         hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
         latent_dim = trial.suggest_int('latent_dim', 12, 22)
-        kl_beta = trial.suggest_float('kl_beta', 1e-2, 1)
+
+        # lambda for MSE, lower as possible
+        lambda_mse = trial.suggest_float('lambda_recon', 3.0, 10.0)
+        # alpha for Mutual Information, around 1.0
+        #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
+        alpha_mi = trial.suggest_float('alpha_mi', 0.8, 1.0)
+        # beta for Total Correlation, lower as possible
+        beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
+        # gamma for Dimension-wise KL, around 1.0
+        #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.8, 5.0)
+        gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 1.0, 1.1)
 
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
@@ -94,47 +103,78 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
             train_loss_accum = 0.0
 
             reconstruction_loss_accum = 0.0
-            kl_loss_accum = 0.0
+            mi_loss_accum = 0.0
+            tc_loss_accum = 0.0
+            dw_kl_loss_accum = 0.0
 
             for data in train_loader:
                 # Forward pass
                 data = data.to(device)
                 optimizer.zero_grad()
-
-                reconstruction_loss_value, kl_value = model(data, reduction='avg')
-                kl_value = kl_value * kl_beta
-                loss = reconstruction_loss_value + kl_value
+                # use the model
+                reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                # multiply by the factors
+                reconstruction_loss_value = reconstruction_loss_value * lambda_mse
+                mi = mi * alpha_mi
+                tc = tc * beta_tc
+                dw_kl = dw_kl * gamma_dw_kl
+                # sum total loss
+                loss = reconstruction_loss_value + mi + tc + dw_kl
 
                 loss.backward()
                 optimizer.step()
                 train_loss_accum += loss.item()
 
                 reconstruction_loss_accum += reconstruction_loss_value.item()
-                kl_loss_accum += kl_value.item()
+                mi_loss_accum += mi.item()
+                tc_loss_accum += tc.item()
+                dw_kl_loss_accum += dw_kl.item()
 
             # Calculate train batch loss
             avg_train_loss = train_loss_accum / len(train_loader)
 
             avg_reconstruction_loss = reconstruction_loss_accum / len(train_loader)
-            avg_kl_loss = kl_loss_accum / len(train_loader)
+            avg_mi_loss = mi_loss_accum / len(train_loader)
+            avg_tc_loss = tc_loss_accum / len(train_loader)
+            avg_dw_kl_loss = dw_kl_loss_accum / len(train_loader)
 
-            print(f'train MSE: {avg_reconstruction_loss}, train KL-divergence: {avg_kl_loss/kl_beta}, train KL-divergence Beta:{avg_kl_loss}')
+            print(f'train -> MSE: {avg_reconstruction_loss/lambda_mse}, MSE lambda: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}')
 
             # Validation
             model.eval()
             val_loss_accum = 0.0
+
+            val_reconstruction_loss_accum = 0.0
+            val_mi_loss_accum = 0.0
+            val_tc_loss_accum = 0.0
+            val_dw_kl_loss_accum = 0.0
             with torch.no_grad():
                 for data in val_loader:
                     data = data.to(device)
-                    reconstruction_loss_value, kl_value = model(data, reduction='avg')
-                    kl_value = kl_value * kl_beta
-                    loss = reconstruction_loss_value + kl_value
+
+                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                    reconstruction_loss_value = reconstruction_loss_value * lambda_mse
+                    mi = mi * alpha_mi
+                    tc = tc * beta_tc
+                    dw_kl = dw_kl * gamma_dw_kl
+                    loss = reconstruction_loss_value + mi + tc + dw_kl
+
+                    #val_reconstruction_loss_accum += val_reconstruction_loss_accum.item()
+                    #val_mi_loss_accum += mi.item()
+                    #val_tc_loss_accum += tc.item()
+                    #val_dw_kl_loss_accum += dw_kl.item()
 
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
                         raise optuna.exceptions.TrialPruned()
                     val_loss_accum += loss.item()
+
             avg_val_loss = val_loss_accum / len(val_loader)
+
+            #avg_val_reconstruction_loss = val_reconstruction_loss_accum / len(val_loader)
+            #avg_val_mi_loss = val_mi_loss_accum / len(val_loader)
+            #vg_val_tc_loss = val_tc_loss_accum / len(val_loader)
+            #avg_val_dw_kl_loss = val_dw_kl_loss_accum / len(val_loader)
 
             epoch_duration = time.time() - epoch_start_time
             print(
@@ -160,13 +200,13 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_v5"
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v4"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=50)
+    study.optimize(train_model, n_trials=150)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
@@ -174,13 +214,22 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     print(f'best elbo: {best_value}')
     mlflow.log_param('vae_params', str(best_params))
 
+    # save optuna best trails to review parameters selection
+    best_trails_df = study.trials_dataframe()
+    best_trails_df = best_trails_df.sample(10)
+    best_trails_filepath = os.path.join(results_folder_path, 'best_trails.csv')
+    best_trails_df.to_csv(best_trails_filepath, index=False)
+    mlflow.log_artifact(best_trails_filepath)
+
     # Retrain the best model
     # TODO:: The retraining is done from scratch using the best hyperparameters to ensure the values benefit the model
 
     # Init the Autoencoder, loss function metric and optimizer
     latent_dim = best_params['latent_dim']
     hidden_dim = best_params['hidden_dim']
-    kl_beta = best_params['kl_beta']
+    alpha_mi = best_params['alpha_mi']
+    beta_tc = best_params['beta_tc']
+    gamma_dw_kl = best_params['gamma_dw_kl']
     learning_rate = best_params['learning_rate']
     model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -196,47 +245,67 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         train_loss_accum = 0.0
 
         reconstruction_loss_accum = 0.0
-        kl_loss_accum = 0.0
+        mi_loss_accum = 0.0
+        tc_loss_accum = 0.0
+        dw_kl_loss_accum = 0.0
 
         for data in train_loader:
             # Forward pass
             data = data.to(device)
             optimizer.zero_grad()
 
-            reconstruction_loss_value, kl_value = model(data, reduction='avg')
-            kl_value = kl_value * kl_beta
-            loss = reconstruction_loss_value + kl_value
+            # use the model
+            reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+            # multiply by the factors
+            mi = mi * alpha_mi
+            tc = tc * beta_tc
+            dw_kl = dw_kl * gamma_dw_kl
+            # sum total loss
+            loss = reconstruction_loss_value + mi + tc + dw_kl
 
             loss.backward()
             optimizer.step()
             train_loss_accum += loss.item()
 
             reconstruction_loss_accum += reconstruction_loss_value.item()
-            kl_loss_accum += kl_value.item()
+            mi_loss_accum += mi.item()
+            tc_loss_accum += tc.item()
+            dw_kl_loss_accum += dw_kl.item()
 
         # Calculate train batch loss
         avg_train_loss = train_loss_accum / len(train_loader)
         # Calculate train KL Divergence and MSE
         avg_reconstruction_loss = reconstruction_loss_accum / len(train_loader)
-        avg_kl_loss = (kl_loss_accum / len(train_loader)) / kl_beta
+        avg_mi_loss = mi_loss_accum / len(train_loader)
+        avg_tc_loss = tc_loss_accum / len(train_loader)
+        avg_dw_kl_loss = dw_kl_loss_accum / len(train_loader)
 
-        print(
-            f'train MSE: {avg_reconstruction_loss}, train KL-divergence: {avg_kl_loss}, train KL-divergence Beta:{avg_kl_loss *  kl_beta}')
+        print(f'train -> MSE: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}')
 
         # log metrics
-        mlflow.log_metric('train/kl_divergence_value', avg_kl_loss, step=epoch)
+        mlflow.log_metric('train/avg_mi_loss', avg_mi_loss, step=epoch)
+        mlflow.log_metric('train/tc_loss_accum', avg_tc_loss, step=epoch)
+        mlflow.log_metric('train/dw_kl_loss_accum', avg_dw_kl_loss, step=epoch)
         mlflow.log_metric('train/mse_value', avg_reconstruction_loss, step=epoch)
         mlflow.log_metric('train/neg_elbo_value', avg_train_loss, step=epoch)
 
         # Validation
         model.eval()
         val_loss_accum = 0.0
+        mi_loss_accum = 0.0
+        tc_loss_accum = 0.0
+        dw_kl_loss_accum = 0.0
         with torch.no_grad():
             for data in val_loader:
                 data = data.to(device)
-                reconstruction_loss_value, kl_value = model(data, reduction='avg')
-                kl_value = kl_value * kl_beta
-                loss = reconstruction_loss_value + kl_value
+
+                reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                # multiply by the factors
+                mi = mi * alpha_mi
+                tc = tc * beta_tc
+                dw_kl = dw_kl * gamma_dw_kl
+                # sum total loss
+                loss = reconstruction_loss_value + mi + tc + dw_kl
 
                 if torch.isnan(loss):  # Check for NaN loss
                     print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
@@ -246,16 +315,20 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         avg_val_loss = val_loss_accum / len(val_loader)
         # Calculate train KL Divergence and MSE
         avg_val_reconstruction_loss = reconstruction_loss_accum / len(train_loader)
-        avg_val_kl_loss = (kl_loss_accum / len(train_loader)) / kl_beta
+        avg_val_mi_loss = (mi_loss_accum / len(train_loader)) / alpha_mi
+        avg_val_tc_loss = (tc_loss_accum / len(train_loader)) / beta_tc
+        avg_val_dw_kl_loss = (dw_kl_loss_accum / len(train_loader)) / gamma_dw_kl
 
         epoch_duration = time.time() - epoch_start_time
         print(
             f'  Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}, Duration: {epoch_duration:.2f}s')
 
         # log metrics
-        mlflow.log_metric('validation/kl_divergence_val_value', avg_val_kl_loss, step=epoch)
-        mlflow.log_metric('validation/mse_val_value', avg_val_reconstruction_loss, step=epoch)
-        mlflow.log_metric('validation/neg_elbo_val_value', avg_val_loss, step=epoch)
+        mlflow.log_metric('validation/avg_mi_loss', avg_val_mi_loss, step=epoch)
+        mlflow.log_metric('validation/tc_loss_accum', avg_val_tc_loss, step=epoch)
+        mlflow.log_metric('validation/dw_kl_loss_accum', avg_val_dw_kl_loss, step=epoch)
+        mlflow.log_metric('validation/mse_value', avg_val_reconstruction_loss, step=epoch)
+        mlflow.log_metric('validation/neg_elbo_value', avg_val_loss, step=epoch)
 
         # Early Stopping Check
         if early_stopping.step(avg_val_loss):

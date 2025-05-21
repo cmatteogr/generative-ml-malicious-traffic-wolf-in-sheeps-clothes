@@ -84,6 +84,10 @@ LABEL_ENCODER_NAME = 'label_encoder.pkl'
 SCALER_NAME = 'scaler.pkl'
 PREPROCESS_PARAMS_NAME = 'preprocess_params.json'
 
+#
+PREPROCESS_CLASSIFIER_TRAIN_DATASET_FILEPATH = 'traffic_preprocessed_classifier_train.csv'
+PREPROCESS_CLASSIFIER_TEST_DATASET_FILEPATH = 'traffic_preprocessed_classifier_test.csv'
+
 
 # MLFlow constants
 MLFLOW_HOST='127.0.0.1'

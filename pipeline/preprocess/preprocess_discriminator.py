@@ -19,7 +19,7 @@ import mlflow
 import joblib
 
 from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME, \
-    PREPROCESS_PARAMS_NAME
+    PREPROCESS_PARAMS_NAME, PREPROCESS_CLASSIFIER_TRAIN_DATASET_FILEPATH, PREPROCESS_CLASSIFIER_TEST_DATASET_FILEPATH
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -215,20 +215,17 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
                      'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
     # Ensure all power columns exist in the dataframe after outlier removal
     power_columns = [col for col in power_columns if col in X_train.columns]
-    if not power_columns:
-         print("Warning: No columns found for Power Transformation after previous steps.")
-    else:
-        pt_model = PowerTransformer(method='yeo-johnson')
-        # Fit on training data only
-        pt_model.fit(X_train[power_columns])
-        # Transform both train and test data
-        # Use .loc to assign back safely
-        X_train.loc[:, power_columns] = pt_model.transform(X_train[power_columns])
-        X_test.loc[:, power_columns] = pt_model.transform(X_test[power_columns])
-        # Save the fitted PowerTransformer
-        power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
-        joblib.dump(pt_model, power_transformer_filepath)
-        print(f"PowerTransformer saved to {power_transformer_filepath}")
+    pt_model = PowerTransformer(method='yeo-johnson')
+    # Fit on training data only
+    pt_model.fit(X_train[power_columns])
+    # Transform both train and test data
+    # Use .loc to assign back safely
+    X_train.loc[:, power_columns] = pt_model.transform(X_train[power_columns])
+    X_test.loc[:, power_columns] = pt_model.transform(X_test[power_columns])
+    # Save the fitted PowerTransformer
+    power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
+    joblib.dump(pt_model, power_transformer_filepath)
+    print(f"PowerTransformer saved to {power_transformer_filepath}")
 
 
     # --- 7. Feature Encoding: One-Hot Encoding ---
@@ -236,67 +233,58 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     one_hot_encoding_columns = ['Source Port', 'Destination Port']
     # Ensure columns exist
     one_hot_encoding_columns = [col for col in one_hot_encoding_columns if col in X_train.columns]
-    if not one_hot_encoding_columns:
-         print("Warning: No columns found for One-Hot Encoding.")
-         onehot_encoder_filepath = None # Handle case where encoder isn't created
-         onehot_encoder = None
-    else:
-        # Initialize OneHotEncoder
-        # handle_unknown='ignore' prevents errors if test set has categories not seen in train
-        onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        # Fit on training data
-        onehot_encoder.fit(X_train[one_hot_encoding_columns])
+    # Initialize OneHotEncoder
+    # handle_unknown='ignore' prevents errors if test set has categories not seen in train
+    onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    # Fit on training data
+    onehot_encoder.fit(X_train[one_hot_encoding_columns])
 
-        # Transform train data
-        encoded_data_train = onehot_encoder.transform(X_train[one_hot_encoding_columns])
-        encoded_data_train_df = pd.DataFrame(encoded_data_train, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_train.index)
-        # Concatenate and drop original columns
-        X_train = pd.concat([X_train.drop(columns=one_hot_encoding_columns), encoded_data_train_df], axis=1)
+    # Transform train data
+    encoded_data_train = onehot_encoder.transform(X_train[one_hot_encoding_columns])
+    encoded_data_train_df = pd.DataFrame(encoded_data_train, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_train.index)
+    # Concatenate and drop original columns
+    X_train = pd.concat([X_train.drop(columns=one_hot_encoding_columns), encoded_data_train_df], axis=1)
 
-        # Transform test data
-        encoded_data_test = onehot_encoder.transform(X_test[one_hot_encoding_columns])
-        encoded_data_test_df = pd.DataFrame(encoded_data_test, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_test.index)
-        # Concatenate and drop original columns
-        X_test = pd.concat([X_test.drop(columns=one_hot_encoding_columns), encoded_data_test_df], axis=1)
+    # Transform test data
+    encoded_data_test = onehot_encoder.transform(X_test[one_hot_encoding_columns])
+    encoded_data_test_df = pd.DataFrame(encoded_data_test, columns=onehot_encoder.get_feature_names_out(one_hot_encoding_columns), index=X_test.index)
+    # Concatenate and drop original columns
+    X_test = pd.concat([X_test.drop(columns=one_hot_encoding_columns), encoded_data_test_df], axis=1)
 
-        # Save the fitted OneHotEncoder
-        onehot_encoder_filepath = os.path.join(results_folder_path, ONEHOT_ENCODER_NAME)
-        joblib.dump(onehot_encoder, onehot_encoder_filepath)
-        print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
+    # Save the fitted OneHotEncoder
+    onehot_encoder_filepath = os.path.join(results_folder_path, ONEHOT_ENCODER_NAME)
+    joblib.dump(onehot_encoder, onehot_encoder_filepath)
+    print(f"OneHotEncoder saved to {onehot_encoder_filepath}")
 
 
     # --- 8. Outlier Detection/Removal (Isolation Forest - Applied AFTER transformations) ---
     # Applying Isolation Forest on the transformed/encoded data
     print('Applying Isolation Forest for global outlier removal...')
     # Ensure X_train is not empty before fitting
-    if not X_train.empty:
-        iso_forest = IsolationForest(n_estimators=200, contamination='auto', random_state=42) # 'auto' contamination is often a good starting point
-        # Fit the model only on training data
-        iso_forest.fit(X_train)
+    iso_forest = IsolationForest(n_estimators=200, contamination='auto', random_state=42) # 'auto' contamination is often a good starting point
+    # Fit the model only on training data
+    iso_forest.fit(X_train)
 
-        # Predict anomalies (-1 for outliers, 1 for inliers)
-        train_outliers = iso_forest.predict(X_train)
-        test_outliers = iso_forest.predict(X_test)
+    # Predict anomalies (-1 for outliers, 1 for inliers)
+    train_outliers = iso_forest.predict(X_train)
+    test_outliers = iso_forest.predict(X_test)
 
-        # Create masks for inliers
-        iso_inliers_mask_train = train_outliers != -1
-        iso_inliers_mask_test = test_outliers != -1
+    # Create masks for inliers
+    iso_inliers_mask_train = train_outliers != -1
+    iso_inliers_mask_test = test_outliers != -1
 
-        # Remove outliers from train and test sets (X and y)
-        X_train = X_train.loc[iso_inliers_mask_train]
-        y_train = y_train.loc[iso_inliers_mask_train] # Keep y aligned
-        X_test = X_test.loc[iso_inliers_mask_test]
-        y_test = y_test.loc[iso_inliers_mask_test] # Keep y aligned
+    # Remove outliers from train and test sets (X and y)
+    X_train = X_train.loc[iso_inliers_mask_train]
+    y_train = y_train.loc[iso_inliers_mask_train] # Keep y aligned
+    X_test = X_test.loc[iso_inliers_mask_test]
+    y_test = y_test.loc[iso_inliers_mask_test] # Keep y aligned
 
-        print(f'Shape after Isolation Forest: Train={X_train.shape}, Test={X_test.shape}')
+    print(f'Shape after Isolation Forest: Train={X_train.shape}, Test={X_test.shape}')
 
-        # Save the fitted IsolationForest model
-        iso_forest_model_filepath = os.path.join(results_folder_path, ISO_FOREST_MODEL_NAME)
-        joblib.dump(iso_forest, iso_forest_model_filepath)
-        print(f"IsolationForest model saved to {iso_forest_model_filepath}")
-    else:
-        print("Skipping Isolation Forest as training data is empty.")
-        iso_forest_model_filepath = None # Handle case where model isn't created
+    # Save the fitted IsolationForest model
+    iso_forest_model_filepath = os.path.join(results_folder_path, ISO_FOREST_MODEL_NAME)
+    joblib.dump(iso_forest, iso_forest_model_filepath)
+    print(f"IsolationForest model saved to {iso_forest_model_filepath}")
 
 
     # --- 9. Undersampling (Applied only to Training Data) ---
@@ -371,8 +359,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # --- 11. Save Preprocessed Data ---
     print('Saving preprocessed data...')
     # Define file paths
-    train_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_train.csv')
-    test_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_test.csv')
+    train_traffic_filepath = os.path.join(results_folder_path, PREPROCESS_CLASSIFIER_TRAIN_DATASET_FILEPATH)
+    test_traffic_filepath = os.path.join(results_folder_path, PREPROCESS_CLASSIFIER_TEST_DATASET_FILEPATH)
     # Save to CSV
     X_train_sampled.to_csv(train_traffic_filepath, index=False)
     test_traffic_df.to_csv(test_traffic_filepath, index=False)
@@ -389,8 +377,8 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
         "label_encoding_mapping": label_encoding_mapping, # Logged as dict
         "min_port": min_port,
         "max_port": max_port,
-        "power_columns": power_columns if 'power_columns' in locals() else [], # Ensure variable exists
-        "one_hot_encoding_columns": one_hot_encoding_columns if 'one_hot_encoding_columns' in locals() else [], # Ensure variable exists
+        "power_columns": power_columns,
+        "one_hot_encoding_columns": one_hot_encoding_columns,
         "n_instances_per_traffic_type_target": n_instances_per_traffic_type,
         "test_size": test_size,
         "z_score_threshold": threshold_z,
@@ -408,15 +396,14 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
     # Collect artifact paths, handling cases where artifacts might not have been created
     preprocess_artifacts = {
-        "power_transformer": power_transformer_filepath if 'power_transformer_filepath' in locals() and power_transformer_filepath else None,
-        "onehot_encoder": onehot_encoder_filepath if 'onehot_encoder_filepath' in locals() and onehot_encoder_filepath else None,
-        "iso_forest_model": iso_forest_model_filepath if 'iso_forest_model_filepath' in locals() and iso_forest_model_filepath else None,
-        "label_encoder": label_encoder_filepath if 'label_encoder_filepath' in locals() else None,
-        "preprocess_params": preprocess_params_filepath if 'preprocess_params_filepath' in locals() else None
+        "power_transformer": power_transformer_filepath,
+        "onehot_encoder": onehot_encoder_filepath,
+        "iso_forest_model": iso_forest_model_filepath,
+        "label_encoder": label_encoder_filepath,
+        "preprocess_params": preprocess_params_filepath
     }
     # Filter out None values before returning
     preprocess_artifacts = {k: v for k, v in preprocess_artifacts.items() if v is not None}
-
 
     # Return paths to preprocessed data and the dictionary of artifact paths
     return train_traffic_filepath, test_traffic_filepath, preprocess_artifacts

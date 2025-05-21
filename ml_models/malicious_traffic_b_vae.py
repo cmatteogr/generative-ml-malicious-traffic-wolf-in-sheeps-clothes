@@ -321,6 +321,13 @@ class VAE(nn.Module):
         # Decode z to get the mean reconstruction x' = E[p(x|z)]
         return self.decoder.sample(z)
 
+    def reconstruct_x(self, x):
+        """Use x and reconstruct it through the Encoder and Decoder"""
+        # sample via encoder
+        z = self.encoder.sample(x)
+        # decode via decoder
+        return self.decoder.sample(z)
+
     def interpolation(self, x1=None, x2=None, z1=None, z2=None, num_steps=10):
         """Generates new samples x' by sampling z ~ p(z) and decoding."""
         # check if x1 and x2 were provided, z1 and z2 exclusive

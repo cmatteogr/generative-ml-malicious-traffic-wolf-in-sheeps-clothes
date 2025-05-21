@@ -1,7 +1,7 @@
 """
 Test case evaluation
 """
-from pipeline.evaluation.evaluation_traffic_classifier import evaluation
+from pipeline.evaluation.evaluation_traffic_discriminator import evaluation
 
 
 def test_evaluation():
