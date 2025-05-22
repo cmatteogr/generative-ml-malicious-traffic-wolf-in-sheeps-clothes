@@ -200,7 +200,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v8"
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v12"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
