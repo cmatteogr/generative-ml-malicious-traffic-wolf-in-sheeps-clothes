@@ -55,7 +55,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     # Init the autoencoder Hyperparameters
-    num_epochs = 350
+    num_epochs = 550
     early_stopping_patience = 15
     kl_beta = 0.03
 
