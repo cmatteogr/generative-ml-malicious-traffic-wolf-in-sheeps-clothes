@@ -74,7 +74,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         latent_dim = trial.suggest_int('latent_dim', 12, 22)
 
         # lambda for MSE, lower as possible
-        lambda_mse = trial.suggest_float('lambda_recon', 3.0, 10.0)
+        lambda_mse = trial.suggest_float('lambda_recon', 5.0, 10.0)
         # alpha for Mutual Information, around 1.0
         #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
         alpha_mi = trial.suggest_float('alpha_mi', 0.8, 1.0)
@@ -200,7 +200,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v4"
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v8"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
