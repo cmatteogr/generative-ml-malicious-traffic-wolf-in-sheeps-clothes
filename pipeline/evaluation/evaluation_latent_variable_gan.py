@@ -7,7 +7,7 @@ import mlflow
 import torch
 import json
 from torch.utils.data import DataLoader
-from ml_models.malicious_traffic_latent_variable_gan import VAE
+from ml_models.malicious_traffic_b_vae import VAE
 import plotly.express as px
 from sklearn.decomposition import PCA
 from ydata_profiling import ProfileReport

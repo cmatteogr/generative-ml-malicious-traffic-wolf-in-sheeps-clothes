@@ -74,15 +74,15 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         latent_dim = trial.suggest_int('latent_dim', 12, 22)
 
         # lambda for MSE, lower as possible
-        lambda_mse = trial.suggest_float('lambda_recon', 5.0, 10.0)
+        lambda_mse = trial.suggest_float('lambda_recon', 10.0, 12.0)
         # alpha for Mutual Information, around 1.0
         #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
-        alpha_mi = trial.suggest_float('alpha_mi', 0.8, 1.0)
+        alpha_mi = trial.suggest_float('alpha_mi', 0.6, 0.8)
         # beta for Total Correlation, lower as possible
         beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
         # gamma for Dimension-wise KL, around 1.0
         #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.8, 5.0)
-        gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 1.0, 1.1)
+        gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.6, 0.8)
 
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
@@ -200,13 +200,13 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v12"
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v16"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=150)
+    study.optimize(train_model, n_trials=250)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
