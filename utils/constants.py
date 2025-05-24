@@ -74,7 +74,7 @@ RELEVANT_COLUMNS = [
 # classification model name
 TRAFFIC_CLASSIFIER_MODEL_FILENAME: str = 'xgb_server_traffic_classifier.json'
 # generative model name
-TRAFFIC_GENERATOR_MODEL_FILENAME: str = 'beta_vae_traffic_generator_model.pth'
+TRAFFIC_GENERATOR_MODEL_FILENAME: str = 'beta_bvae_traffic_generator_model.pth'
 
 # models filepaths
 POWER_TRANSFORMER_NAME = 'power_transformer.pkl'

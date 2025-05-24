@@ -7,7 +7,7 @@ import mlflow
 import torch
 import json
 from torch.utils.data import DataLoader
-from ml_models.malicious_traffic_b_vae import VAE
+from ml_models.malicious_traffic_b_tcvae import VAE
 import plotly.express as px
 from sklearn.decomposition import PCA
 from ydata_profiling import ProfileReport
@@ -24,14 +24,17 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     """
     print("read test traffic data")
     traffic_df = pd.read_csv(data_test_filepath)
+    traffic_df = traffic_df.sample(35000)
     labels = traffic_df.pop('Label')
-    tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32)
+
+    # define device to use
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda")
+
+    tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32).to(device)
     evaluation_loader = DataLoader(tensor_data, batch_size=512, shuffle=False)
     # define n columns
     n_features = len(traffic_df.columns)
-
-    # define device to use
-    device = torch.device("cpu")
 
     # get model args
     #with open(model_hyperparams_filepath, 'r') as file:
@@ -40,22 +43,17 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     #    hidden_dim = model_hyperparams_data['hidden_dim']
     #    kl_beta = model_hyperparams_data['kl_beta']
 
-    latent_dim = 20
-    hidden_dim = 38
-    kl_beta = 0.03
+    latent_dim = 16
+    hidden_dim = 36
 
     # init model with hyperparameters
     model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     model.load_state_dict(torch.load(model_filepath))
 
     # set model to evaluation mode
-    reconstruction_loss_value, kl_value = model(tensor_data, reduction='avg')
+    reconstruction_loss_value, mi, tc, dw_kl = model(tensor_data, reduction='avg')
     reconstruction_loss_value = reconstruction_loss_value.item()
-    kl_value = kl_value.item()
-    eval_loss_elbo = reconstruction_loss_value + kl_value
     # Calculate the ELBO, KL Divergence value and MSE averages value
-    avg_eval_loss = eval_loss_elbo / len(evaluation_loader)
-    avg_eval_kl = (kl_value / len(evaluation_loader)) / kl_beta
     avg_eval_reconstruction_loss = reconstruction_loss_value / len(evaluation_loader)
 
     # log metrics
@@ -92,7 +90,7 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
                             labels={'color': 'True Label'})
     fig_pca.update_traces(marker=dict(size=2, opacity=0.7))
     # save plot
-    latent_space_pca_filepath = os.path.join(results_folder_path, "vae_latent_space_pca_bvea.html")
+    latent_space_pca_filepath = os.path.join(results_folder_path, "vae_latent_space_pca_btcvea.html")
     fig_pca.write_html(latent_space_pca_filepath)
     #mlflow.log_artifact(latent_space_pca_filepath)
 
@@ -107,7 +105,7 @@ def evaluation(model_filepath: str, model_hyperparams_filepath: str, data_test_f
     generated_data_report = ProfileReport(generated_data_df, title="Generated data")
     # compare reports, original data and generated data
     comparison_report = original_data_report.compare(generated_data_report)
-    original_data_vs_generated_data_filepath = os.path.join(results_folder_path, "original_data_vs_generated_data_bvea.html")
+    original_data_vs_generated_data_filepath = os.path.join(results_folder_path, "original_data_vs_generated_data_btcvea.html")
     comparison_report.to_file(original_data_vs_generated_data_filepath)
     # save report in artifacts
     #mlflow.log_artifact(original_data_vs_generated_data_filepath)

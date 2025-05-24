@@ -1,13 +1,13 @@
 """
 Test case evaluation
 """
-from pipeline.evaluation.evaluation_latent_variable_gan import evaluation
+from pipeline.evaluation.evaluation_traffic_b_tcvae import evaluation
 
 
 def test_evaluation():
-    test_traffic_filepath = 'traffic_preprocessed_test_bvae.csv'
+    test_traffic_filepath = 'traffic_preprocessed_test_btcvae.csv'
     model_hyperparams_filepath = ''
-    model_filepath = 'beta_bvae_traffic_generator_model.pth'
+    model_filepath = 'beta_btcvae_traffic_generator_model.pth'
     results_folder_path = 'results'
     evaluation(model_filepath=model_filepath,
                model_hyperparams_filepath=model_hyperparams_filepath,

@@ -4,6 +4,7 @@ Author: Cesar M. Gonzalez
 """
 import torch
 import torch.optim as optim
+from overrides import override
 from torch.utils.data import DataLoader, random_split
 import optuna
 import pandas as pd
@@ -16,7 +17,7 @@ from ml_models.malicious_traffic_b_tcvae import VAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 
 
-def train(traffic_data_filepath: str, results_folder_path: str, train_size_percentage=0.8, batch_size=1024):
+def train(traffic_data_filepath: str, results_folder_path: str, train_size_percentage=0.75, batch_size=1024):
     """
     Beta - Total Correlation VAE training
 
@@ -56,7 +57,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Init the autoencoder Hyperparameters
     num_epochs = 550
-    early_stopping_patience = 20
+    early_stopping_patience = 15
     kl_beta = 0.03
 
     # log in mlflow training params
@@ -159,10 +160,11 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                     dw_kl = dw_kl * gamma_dw_kl
                     loss = reconstruction_loss_value + mi + tc + dw_kl
 
-                    #val_reconstruction_loss_accum += val_reconstruction_loss_accum.item()
-                    #val_mi_loss_accum += mi.item()
-                    #val_tc_loss_accum += tc.item()
-                    #val_dw_kl_loss_accum += dw_kl.item()
+                    val_loss_accum += loss.item()
+                    val_reconstruction_loss_accum += reconstruction_loss_value.item()
+                    val_mi_loss_accum += mi.item()
+                    val_tc_loss_accum += tc.item()
+                    val_dw_kl_loss_accum += dw_kl.item()
 
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
@@ -171,11 +173,13 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
             avg_val_loss = val_loss_accum / len(val_loader)
 
-            #avg_val_reconstruction_loss = val_reconstruction_loss_accum / len(val_loader)
-            #avg_val_mi_loss = val_mi_loss_accum / len(val_loader)
-            #vg_val_tc_loss = val_tc_loss_accum / len(val_loader)
-            #avg_val_dw_kl_loss = val_dw_kl_loss_accum / len(val_loader)
+            avg_val_reconstruction_loss = val_reconstruction_loss_accum / len(val_loader)
+            avg_val_mi_loss = (val_mi_loss_accum / len(val_loader)) / alpha_mi
+            avg_val_tc_loss = (val_tc_loss_accum / len(val_loader)) / beta_tc
+            avg_val_dw_kl_loss = (val_dw_kl_loss_accum / len(val_loader)) / gamma_dw_kl
 
+            print(
+                f'valid -> MSE: {avg_val_reconstruction_loss / lambda_recon}, MSE lambda: {avg_val_reconstruction_loss}, MI: {avg_val_mi_loss / alpha_mi}, MI alpha:{avg_val_mi_loss}, TC: {avg_val_tc_loss / beta_tc}, TC beta:{avg_val_tc_loss}, DW_KL: {avg_val_dw_kl_loss / gamma_dw_kl}, DW_KL gamma:{avg_val_dw_kl_loss}')
             epoch_duration = time.time() - epoch_start_time
             print(
                 f'  Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}, Duration: {epoch_duration:.2f}s')
@@ -206,7 +210,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=150)
+    study.optimize(train_model, n_trials=1)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
@@ -236,7 +240,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # Early stopping is added to avoid overfitting
     early_stopping = EarlyStopping(patience=early_stopping_patience*2)
-    num_epochs_val = num_epochs * 2
+    num_epochs_val = num_epochs
 
     # Training loop
     print(f'Training Beta-TCVAE. Best params: {best_params}')
@@ -286,10 +290,10 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         print(f'train -> MSE: {avg_reconstruction_loss/lambda_recon}, MSE lambda: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}')
 
         # log metrics
-        mlflow.log_metric('train/avg_mi_loss', avg_mi_loss, step=epoch)
-        mlflow.log_metric('train/tc_loss_accum', avg_tc_loss, step=epoch)
-        mlflow.log_metric('train/dw_kl_loss_accum', avg_dw_kl_loss, step=epoch)
-        mlflow.log_metric('train/mse_value', avg_reconstruction_loss, step=epoch)
+        mlflow.log_metric('train/avg_mi_loss', avg_mi_loss/alpha_mi, step=epoch)
+        mlflow.log_metric('train/tc_loss_accum', avg_tc_loss/beta_tc, step=epoch)
+        mlflow.log_metric('train/dw_kl_loss_accum', avg_dw_kl_loss/gamma_dw_kl, step=epoch)
+        mlflow.log_metric('train/mse_value', avg_reconstruction_loss/lambda_recon, step=epoch)
         mlflow.log_metric('train/neg_elbo_value', avg_train_loss, step=epoch)
 
         # Validation
@@ -334,10 +338,10 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
             f'  Epoch [{epoch + 1}/{num_epochs_val}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}, Duration: {epoch_duration:.2f}s')
 
         # log metrics
-        mlflow.log_metric('validation/avg_mi_loss', avg_val_mi_loss, step=epoch)
-        mlflow.log_metric('validation/tc_loss_accum', avg_val_tc_loss, step=epoch)
-        mlflow.log_metric('validation/dw_kl_loss_accum', avg_val_dw_kl_loss, step=epoch)
-        mlflow.log_metric('validation/mse_value', avg_val_reconstruction_loss, step=epoch)
+        mlflow.log_metric('validation/avg_mi_loss', avg_val_mi_loss / alpha_mi, step=epoch)
+        mlflow.log_metric('validation/tc_loss_accum', avg_val_tc_loss / beta_tc, step=epoch)
+        mlflow.log_metric('validation/dw_kl_loss_accum', avg_val_dw_kl_loss / gamma_dw_kl, step=epoch)
+        mlflow.log_metric('validation/mse_value', avg_val_reconstruction_loss / lambda_recon, step=epoch)
         mlflow.log_metric('validation/neg_elbo_value', avg_val_loss, step=epoch)
 
         # Early Stopping Check

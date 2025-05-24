@@ -342,7 +342,7 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print('Saving preprocessed data...')
     # Define file paths
     train_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_train.csv')
-    test_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_test.csv')
+    test_traffic_filepath = os.path.join(results_folder_path, 'traffic_preprocessed_test_bvae.csv')
     # Save to CSV
     X_train_sampled.to_csv(train_traffic_filepath, index=False)
     test_traffic_df.to_csv(test_traffic_filepath, index=False)
