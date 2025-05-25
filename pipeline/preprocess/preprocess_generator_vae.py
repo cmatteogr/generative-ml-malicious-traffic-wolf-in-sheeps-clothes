@@ -116,21 +116,18 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     mean_fwd_packet_len_mean = X_train[fwd_packet_len_mean_col].mean()
     std_fwd_packet_len_mean = X_train[fwd_packet_len_mean_col].std()
     # Avoid division by zero if std is 0
-    if std_fwd_packet_len_mean > 0:
-        # Compute Z-scores for train
-        z_scores_train = (X_train[fwd_packet_len_mean_col] - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
-        train_inliers_mask = np.abs(z_scores_train) <= threshold_z
-        # Compute Z-scores for test using train mean/std
-        z_scores_test = (X_test[fwd_packet_len_mean_col] - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
-        test_inliers_mask = np.abs(z_scores_test) <= threshold_z
+    # Compute Z-scores for train
+    z_scores_train = (X_train[fwd_packet_len_mean_col] - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
+    train_inliers_mask = np.abs(z_scores_train) <= threshold_z
+    # Compute Z-scores for test using train mean/std
+    z_scores_test = (X_test[fwd_packet_len_mean_col] - mean_fwd_packet_len_mean) / std_fwd_packet_len_mean
+    test_inliers_mask = np.abs(z_scores_test) <= threshold_z
 
-        # Filter both X and y based on train mask
-        X_train = X_train.loc[train_inliers_mask]
-        # Filter test set
-        X_test = X_test.loc[test_inliers_mask]
-        print(f'Shape after Z-score on {fwd_packet_len_mean_col}: Train={X_train.shape}, Test={X_test.shape}')
-    else:
-        print(f"Skipping Z-score for {fwd_packet_len_mean_col} as standard deviation is zero.")
+    # Filter both X and y based on train mask
+    X_train = X_train.loc[train_inliers_mask]
+    # Filter test set
+    X_test = X_test.loc[test_inliers_mask]
+    print(f'Shape after Z-score on {fwd_packet_len_mean_col}: Train={X_train.shape}, Test={X_test.shape}')
 
     # --- 5b. Z-Score Outlier Removal (Example on 'Fwd Packet Length Std') ---
     # (Repeating the pattern for another column)
@@ -139,21 +136,19 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     # Calculate mean and std *only* from training data
     mean_fwd_packet_len_std = X_train[fwd_packet_len_std_col].mean()
     std_fwd_packet_len_std = X_train[fwd_packet_len_std_col].std()
-    if std_fwd_packet_len_std > 0:
-        # Compute Z-scores for train
-        z_scores_train_std = (X_train[fwd_packet_len_std_col] - mean_fwd_packet_len_std) / std_fwd_packet_len_std
-        train_inliers_mask_std = np.abs(z_scores_train_std) <= threshold_z
-        # Compute Z-scores for test using train mean/std
-        z_scores_test_std = (X_test[fwd_packet_len_std_col] - mean_fwd_packet_len_std) / std_fwd_packet_len_std
-        test_inliers_mask_std = np.abs(z_scores_test_std) <= threshold_z
+    # Compute Z-scores for train
+    z_scores_train_std = (X_train[fwd_packet_len_std_col] - mean_fwd_packet_len_std) / std_fwd_packet_len_std
+    train_inliers_mask_std = np.abs(z_scores_train_std) <= threshold_z
+    # Compute Z-scores for test using train mean/std
+    z_scores_test_std = (X_test[fwd_packet_len_std_col] - mean_fwd_packet_len_std) / std_fwd_packet_len_std
+    test_inliers_mask_std = np.abs(z_scores_test_std) <= threshold_z
 
-        # Filter both X and y based on train mask
-        X_train = X_train.loc[train_inliers_mask_std]
-        # Filter test set
-        X_test = X_test.loc[test_inliers_mask_std]
-        print(f'Shape after Z-score on {fwd_packet_len_std_col}: Train={X_train.shape}, Test={X_test.shape}')
-    else:
-        print(f"Skipping Z-score for {fwd_packet_len_std_col} as standard deviation is zero.")
+    # Filter both X and y based on train mask
+    X_train = X_train.loc[train_inliers_mask_std]
+    # Filter test set
+    X_test = X_test.loc[test_inliers_mask_std]
+    print(f'Shape after Z-score on {fwd_packet_len_std_col}: Train={X_train.shape}, Test={X_test.shape}')
+
 
     # --- 5c. KMeans Outlier Removal (Example on Bwd Packet Length features) ---
     # Note: This scales, fits KMeans, calculates distances, finds a threshold, and filters.
@@ -353,12 +348,12 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print('Logging parameters and preparing artifacts dictionary...')
     # Consolidate parameters for logging
     params = {
-        "relevant_columns": relevant_column,  # Logged as list
-        "valid_traffic_types": valid_traffic_types,  # Logged as list
+        "relevant_columns": relevant_column,
+        "valid_traffic_types": valid_traffic_types,
         "min_port": min_port,
         "max_port": max_port,
-        "power_columns": power_columns if 'power_columns' in locals() else [],  # Ensure variable exists
-        "one_hot_encoding_columns": one_hot_encoding_columns if 'one_hot_encoding_columns' in locals() else [],
+        "power_columns": power_columns,
+        "one_hot_encoding_columns": one_hot_encoding_columns,
         # Ensure variable exists
         "n_instances_per_traffic_type_target": n_instances_per_traffic_type,
         "test_size": test_size,
@@ -378,11 +373,11 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
 
     # Collect artifact paths, handling cases where artifacts might not have been created
     preprocess_artifacts = {
-        "power_transformer": power_transformer_filepath if 'power_transformer_filepath' in locals() and power_transformer_filepath else None,
-        "onehot_encoder": onehot_encoder_filepath if 'onehot_encoder_filepath' in locals() and onehot_encoder_filepath else None,
-        "iso_forest_model": iso_forest_model_filepath if 'iso_forest_model_filepath' in locals() and iso_forest_model_filepath else None,
-        "scaler": scaler_model_filepath if 'scaler_model_filepath' in locals() else None,
-        "preprocess_params": preprocess_params_filepath if 'preprocess_params_filepath' in locals() else None
+        "power_transformer": power_transformer_filepath,
+        "onehot_encoder": onehot_encoder_filepath,
+        "iso_forest_model": iso_forest_model_filepath,
+        "scaler": scaler_model_filepath,
+        "preprocess_params": preprocess_params_filepath
     }
     # Filter out None values before returning
     preprocess_artifacts = {k: v for k, v in preprocess_artifacts.items() if v is not None}

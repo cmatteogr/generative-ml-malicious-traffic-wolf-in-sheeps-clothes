@@ -469,14 +469,14 @@ class VAE(nn.Module):
             raise Exception(f"Provide only x1, x2 or z1, z2, not both.")
 
         # if x1 and x2 were provide calculate the z representations
-        if (x1 is None) and (x2 is None):
+        if (x1 is not None) and (x2 is not None):
             z1 = self.encoder.sample(x=x1)
-            z2 = self.encoder.sample(x=x1)
+            z2 = self.encoder.sample(x=x2)
 
         # Apply interpolation
         for alpha_val in np.linspace(0, 1, num_steps):
             z_interp = (1 - alpha_val) * z1 + alpha_val * z2
             with torch.no_grad():
                 interpolated_sample = self.decoder.sample(z_interp)
-                return interpolated_sample
+                return interpolated_sample, z_interp
 

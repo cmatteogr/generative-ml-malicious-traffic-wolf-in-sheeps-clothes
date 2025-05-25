@@ -1,7 +1,7 @@
 """
 Test case evaluation
 """
-from pipeline.evaluation.evaluation_traffic_b_tcvae import evaluation
+from pipeline.evaluation.evaluation_interpolation_traffic_b_tcvae import evaluation
 
 
 def test_evaluation():
