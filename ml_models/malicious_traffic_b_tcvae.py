@@ -459,24 +459,39 @@ class VAE(nn.Module):
         # Decode z to get the mean reconstruction x' = E[p(x|z)]
         return self.decoder.sample(z)
 
-    def interpolation(self, x1=None, x2=None, z1=None, z2=None, num_steps=10):
+    def interpolation(self, x1=None, x2=None, z1=None, z2=None, alpha=0.5):
         """Generates new samples x' by sampling z ~ p(z) and decoding."""
         # check if x1 and x2 were provided, z1 and z2 exclusive
-        if (x1 is None) and (x2 is None) and (z1 is None) and (z2 is None):
-            raise Exception(f"Provide at least x1, x2 or z1, z2.")
-        # check exclusive condition
-        if ((x1 is not None) and (x2 is not None)) and ((z1 is not None) and (z2 is not None)):
-            raise Exception(f"Provide only x1, x2 or z1, z2, not both.")
+        if not (0.0 <= alpha <= 1.0):
+            raise ValueError(f"Alpha must be between 0.0 and 1.0, got {alpha}.")
 
-        # if x1 and x2 were provide calculate the z representations
-        if (x1 is not None) and (x2 is not None):
-            z1 = self.encoder.sample(x=x1)
-            z2 = self.encoder.sample(x=x2)
+            # Ensure either (x1, x2) or (z1, z2) is provided, but not both mixed.
+        if (x1 is None or x2 is None) and (z1 is None or z2 is None):
+            raise ValueError("Provide either (x1 and x2) or (z1 and z2) for interpolation.")
+        if (x1 is not None and z1 is not None) or \
+                (x2 is not None and z2 is not None):  # Avoid mixing x and z inputs for the same point
+            raise ValueError("Provide either x inputs or z inputs, not a mix for the same point.")
 
-        # Apply interpolation
-        for alpha_val in np.linspace(0, 1, num_steps):
-            z_interp = (1 - alpha_val) * z1 + alpha_val * z2
-            with torch.no_grad():
-                interpolated_sample = self.decoder.sample(z_interp)
-                return interpolated_sample, z_interp
+            # Encode x1 and x2 to their latent representations if z1 and z2 are not given
+            # Ensure model is in eval mode and use no_grad for inference if encoding
+        self.eval()  # Set model to evaluation mode
+        with torch.no_grad():  # Disable gradient calculations for this part
+            if z1 is None and x1 is not None:
+                mu1, log_var1 = self.encoder.encode(x1)
+                z1 = self.encoder.reparameterization(mu1, log_var1)  # Or just self.encoder.sample(x=x1)
+            if z2 is None and x2 is not None:
+                mu2, log_var2 = self.encoder.encode(x2)
+                z2 = self.encoder.reparameterization(mu2, log_var2)  # Or just self.encoder.sample(x=x2)
 
+        if z1 is None or z2 is None:  # Should not happen if logic above is correct
+            raise ValueError("Latent vectors z1 and z2 could not be determined.")
+
+        # Perform linear interpolation in the latent space
+        # z_interp = z1 + alpha * (z2 - z1)
+        z_interp = (1.0 - alpha) * z1 + alpha * z2
+
+        # Decode the interpolated latent vector to get the sample
+        with torch.no_grad():  # Disable gradient calculations for decoding
+            interpolated_sample = self.decoder.sample(z_interp)  # Or self.decoder.decode(z_interp)
+
+        return interpolated_sample, z_interp

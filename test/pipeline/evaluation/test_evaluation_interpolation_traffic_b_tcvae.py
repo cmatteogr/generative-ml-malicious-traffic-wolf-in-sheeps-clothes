@@ -5,17 +5,16 @@ from pipeline.evaluation.evaluation_interpolation_traffic_b_tcvae import evaluat
 
 
 def test_evaluation():
-    test_traffic_filepath = 'traffic_preprocessed_test_btcvae.csv'
-    model_hyperparams_filepath = ''
-    model_filepath = 'beta_btcvae_traffic_generator_model.pth'
-    results_folder_path = 'results'
+    generator_model_filepath = 'beta_btcvae_traffic_generator_model.pth'
     model_discriminator_filepath = 'xgb_server_traffic_classifier.json'
     scale_model_filepath = 'scaler.pkl'
-    label_encoder_model_filepath ='label_encoder.pkl'
+    label_encoder_model_filepath = 'label_encoder.pkl'
+    traffic_data_filepath = 'traffic_preprocessed_test_btcvae.csv'
+    results_folder_path = 'results'
 
-    evaluation_interpolation(model_generator_filepath=model_filepath,
+    evaluation_interpolation(model_generator_filepath=generator_model_filepath,
                              model_discriminator_filepath=model_discriminator_filepath,
-                             label_encoder_model_filepath=label_encoder_model_filepath,
                              scale_model_filepath=scale_model_filepath,
-                             data_test_filepath=test_traffic_filepath,
+                             label_encoder_model_filepath=label_encoder_model_filepath,
+                             traffic_data_filepath=traffic_data_filepath,
                              results_folder_path=results_folder_path)
