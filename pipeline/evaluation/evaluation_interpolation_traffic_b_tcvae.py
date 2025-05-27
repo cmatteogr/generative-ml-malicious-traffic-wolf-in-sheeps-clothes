@@ -100,4 +100,4 @@ def evaluation_interpolation(model_generator_filepath: str, model_discriminator_
     results_filepath = os.path.join(results_folder_path, "vae_latent_space_pca_btcvea_interpolation.html")
     plot_title = 'B-TCVAE-GAN Latent Space'
     plot_latent_space_vae(z_tensor_chain.detach().numpy(), z_chain_labels, results_filepath,
-                          market_size=4, plot_title=plot_title)
+                          market_size=4, plot_title=plot_title, equal_range_axis=True)

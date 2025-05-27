@@ -6,22 +6,28 @@ import xgboost as xgb
 import pandas as pd
 from sklearn.metrics import f1_score
 import mlflow
-from utils.plots import generate_confusion_matrix_plot, plot_instances_by_features, \
-    plot_instances_by_features_interactive
+from utils.plots import generate_confusion_matrix_plot, plot_instances_by_features
+from sklearn.preprocessing import LabelEncoder
+import joblib
 
 
-def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path: str) -> dict:
+def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path: str,
+               label_encoder_model_filepath:str) -> dict:
     """
     evaluate classifier on test data
     :param model_filepath: model filepath
     :param data_test_filepath: test data filepath
     :param results_folder_path: results folder path
+    :param label_encoder_model_filepath: results folder path
+
     """
     print("read test traffic data")
     traffic_df = pd.read_csv(data_test_filepath)
+    label_encoder_model: LabelEncoder = joblib.load(label_encoder_model_filepath)
 
     # get features and label
     y_test = traffic_df.pop('Label')
+    y_test = label_encoder_model.transform(y_test)
     X_test = traffic_df.copy()
 
     # Load the model

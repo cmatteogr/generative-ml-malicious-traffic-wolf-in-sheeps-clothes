@@ -79,11 +79,13 @@ def plot_instances_by_features_interactive(df, feature_a, feature_b, feature_c):
 def plot_latent_space_vae(z_tensors, z_labels, results_filepath,
                           market_size=2,
                           plot_columns=['PCA1', 'PCA2', 'PCA3'],
-                          plot_title='VAE Latent Space (PCA - 3 Components)'):
+                          plot_title='VAE Latent Space (PCA - 3 Components)',
+                          equal_range_axis=False):
     # reduce dimensionality
     pca = PCA(n_components=3)
     # apply PCA transformation
     z_transformed_pca = pca.fit_transform(z_tensors)
+
     # plot the latent space in 3D
     df_pca_plot = pd.DataFrame(z_transformed_pca, columns=plot_columns)
     df_pca_plot['Label'] = z_labels
@@ -95,6 +97,17 @@ def plot_latent_space_vae(z_tensors, z_labels, results_filepath,
                             title=plot_title,
                             labels={'color': 'True Label'})
     fig_pca.update_traces(marker=dict(size=market_size, opacity=0.7))
+    # define ranges if exist per axis
+    if equal_range_axis:
+        # determine min and max range across all axes
+        min_range = np.min(z_transformed_pca)
+        max_range = np.max(z_transformed_pca)
+        axis_range = [min_range, max_range]
+        fig_pca.update_layout(scene=dict(
+            xaxis=dict(range=axis_range),
+            yaxis=dict(range=axis_range),
+            zaxis=dict(range=axis_range)
+        ))
     # save plot
     fig_pca.write_html(results_filepath)
 
