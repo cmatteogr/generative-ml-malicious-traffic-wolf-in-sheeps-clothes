@@ -4,25 +4,35 @@ Author: Cesar M. Gonzalez
 """
 import torch
 import torch.optim as optim
-from overrides import override
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, random_split
 import optuna
 import pandas as pd
 import mlflow
 import os
 import time
+import xgboost as xgb
+import numpy as np
+import joblib
 from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
-from ml_models.malicious_traffic_b_tcvae import VAE
+from ml_models.malicious_traffic_b_tcvae import B_TCVAE
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import LabelEncoder
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
+from torch.utils.data import TensorDataset
 
 
-def train(traffic_data_filepath: str, results_folder_path: str, discriminator_filepath: str, train_size_percentage=0.75, batch_size=1024):
+def train(traffic_data_filepath: str, results_folder_path: str, discriminator_filepath: str, scaler_model_filepath:str,
+          label_encoder_model_filepath: str, train_size_percentage=0.75, batch_size=1024):
     """
     Beta - Total Correlation VAE training
 
     :param traffic_data_filepath: Traffic dataset
     :param results_folder_path: Folder path where save the results
+    :param discriminator_filepath: Discriminator filepath
+    :param scaler_model_filepath: Scaler model filepath, used to invert normalization and use the discriminator. Discriminator was trained without normalization
+    :param label_encoder_model_filepath: Label encoder filepath
     :param train_size_percentage: Train size percentage, remaining is validation size
     :param batch_size: Batch size
     :return:
@@ -32,41 +42,58 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
     # Check input arguments
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
-
+    # define the device to use to train the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #device = torch.device("cpu")
+
+    # Load scaler model
+    scaler_model: MinMaxScaler = joblib.load(scaler_model_filepath)
+    # Load label encoder model
+    label_encoder_model: LabelEncoder = joblib.load(scaler_model_filepath)
+
+    # Load the Discriminator model
+    #discriminator_model = xgb.XGBClassifier()
+    #discriminator_model.load_model(discriminator_filepath)
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
-    # remove label column
-    # NOTE: This feature may be needed in the future to build the CGAN
-    # traffic_df.pop('Label')
+
+    # remove label column from X features
+    labels = traffic_df.pop('Label')
+
+    # define the number of features
     n_features = len(traffic_df.columns)
     print(f"Training dataset, {n_features} features")
+    # transform to tensor
     tensor_data = torch.tensor(traffic_df.values, dtype=torch.float32)
 
     # Split into training and validation sets
     print('Split dataset into train and validation set')
-    train_size = int(train_size_percentage * len(tensor_data))
-    val_size = len(tensor_data) - train_size
-    train_dataset, val_dataset = random_split(tensor_data, [train_size, val_size])
+    #train_size = int(train_size_percentage * len(tensor_data))
+    #val_size = len(tensor_data) - train_size
+    #train_dataset, val_dataset = random_split(tensor_data, [train_size, val_size])
+    X_train, X_val, y_train, y_val = train_test_split(tensor_data, labels, train_size=train_size_percentage, random_state=42)
 
+    # transform labels index to tensor values and merge them in the loaders
+    # NOTE: THis is needed to include the Label index in the tensors and use batch
+    y_train_tensor = torch.tensor(y_train.values, dtype=torch.long)
+    y_val_tensor = torch.tensor(y_val.values, dtype=torch.long)
+    # Create TensorDataset instances
+    train_torch_dataset = TensorDataset(X_train, y_train_tensor)
+    val_torch_dataset = TensorDataset(X_val, y_val_tensor)
     # Create DataLoader
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_torch_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_torch_dataset, batch_size=batch_size, shuffle=False)
 
     # Init the autoencoder Hyperparameters
     num_epochs = 550
     early_stopping_patience = 15
-    kl_beta = 0.03
 
     # log in mlflow training params
     mlflow.log_param("num_epochs", num_epochs)
     mlflow.log_param("early_stopping_patience", early_stopping_patience)
-    mlflow.log_param("kl_beta", kl_beta)
 
     # Build the model tunner using optuna
-    print('build VAE for generation model')
+    print('build Beta-TCVAE-GAN for generation model')
 
     def train_model(trial):
         # Init the Hyperparameters to change
@@ -77,30 +104,29 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
         # lambda for MSE, lower as possible
         lambda_recon = trial.suggest_float('lambda_recon', 10.0, 12.0)
         # alpha for Mutual Information, around 1.0
-        #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
         alpha_mi = trial.suggest_float('alpha_mi', 0.6, 0.8)
         # beta for Total Correlation, lower as possible
         beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
         # gamma for Dimension-wise KL, around 1.0
-        #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.8, 5.0)
         gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.6, 0.8)
 
-        # Init the Autoencoder, loss function metric and optimizer\
-        # Instantiate the VAE (Continuous)
-        # TODO: Update VAE to allow update input dimension and latent dimension as hyperparameter: n_features, L
-        model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
-
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        # Init the Autoencoder, loss function metric and optimizer
+        generative_model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
+        optimizer = optim.Adam(generative_model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
         early_stopping = EarlyStopping(patience=early_stopping_patience)
 
+        # Load the Discriminator model
+        discriminator_model = xgb.XGBClassifier()
+        discriminator_model.load_model(discriminator_filepath)
+
         # Training loop
-        print('Training VAE model')
+        print('training Beta-TCVAE-GAN model')
         best_trial_val_loss = float('inf')
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
 
-            model.train()
+            generative_model.train()
             train_loss_accum = 0.0
 
             reconstruction_loss_accum = 0.0
@@ -108,19 +134,31 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             tc_loss_accum = 0.0
             dw_kl_loss_accum = 0.0
 
-            for data in train_loader:
+            for data, label in train_loader:
                 # Forward pass
                 data = data.to(device)
+
+                # use the current B_TCVAE to reconstruct
+                reconstructed_data = generative_model.reconstruct_x(data)
+                # invert data normalization to use the discriminator
+                non_normalized_data = scaler_model.inverse_transform(reconstructed_data.detach().cpu().numpy())
+                # use the discriminator to classify traffic
+                pred_label = discriminator_model.predict(non_normalized_data)
+                # compare real and fake labels, calculate fool percentage
+                label_nparray = label.detach().cpu().numpy()
+                n_label_match = np.sum(label.detach().cpu().numpy() == pred_label)
+                fool_fail_score_batch = 1 - (n_label_match/len(label_nparray))
+
                 optimizer.zero_grad()
                 # use the model
-                reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                reconstruction_loss_value, mi, tc, dw_kl = generative_model(data, reduction='avg')
                 # multiply by the factors
                 reconstruction_loss_value = reconstruction_loss_value * lambda_recon
                 mi = mi * alpha_mi
                 tc = tc * beta_tc
                 dw_kl = dw_kl * gamma_dw_kl
                 # sum total loss
-                loss = reconstruction_loss_value + mi + tc + dw_kl
+                loss = reconstruction_loss_value + mi + tc + dw_kl + fool_fail_score_batch
 
                 loss.backward()
                 optimizer.step()
@@ -142,7 +180,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             print(f'train -> MSE: {avg_reconstruction_loss/lambda_recon}, MSE lambda: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}')
 
             # Validation
-            model.eval()
+            generative_model.eval()
             val_loss_accum = 0.0
 
             val_reconstruction_loss_accum = 0.0
@@ -150,10 +188,10 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             val_tc_loss_accum = 0.0
             val_dw_kl_loss_accum = 0.0
             with torch.no_grad():
-                for data in val_loader:
+                for data, label in val_loader:
                     data = data.to(device)
 
-                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                    reconstruction_loss_value, mi, tc, dw_kl = generative_model(data, reduction='avg')
                     reconstruction_loss_value = reconstruction_loss_value * lambda_recon
                     mi = mi * alpha_mi
                     tc = tc * beta_tc
@@ -204,13 +242,13 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v20"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v2"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=1)
+    study.optimize(train_model, n_trials=100)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
@@ -236,7 +274,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
     gamma_dw_kl = best_params['gamma_dw_kl']
     learning_rate = best_params['learning_rate']
     lambda_recon = best_params['lambda_recon']
-    model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
+    model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # Early stopping is added to avoid overfitting
     early_stopping = EarlyStopping(patience=early_stopping_patience*2)

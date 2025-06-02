@@ -13,7 +13,7 @@ import os
 import time
 from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
-from ml_models.malicious_traffic_b_tcvae import VAE
+from ml_models.malicious_traffic_b_tcvae import B_TCVAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 
 
@@ -58,12 +58,10 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     # Init the autoencoder Hyperparameters
     num_epochs = 550
     early_stopping_patience = 15
-    kl_beta = 0.03
 
     # log in mlflow training params
     mlflow.log_param("num_epochs", num_epochs)
     mlflow.log_param("early_stopping_patience", early_stopping_patience)
-    mlflow.log_param("kl_beta", kl_beta)
 
     # Build the model tunner using optuna
     print('build VAE for generation model')
@@ -88,7 +86,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
         # TODO: Update VAE to allow update input dimension and latent dimension as hyperparameter: n_features, L
-        model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
+        model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
 
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
@@ -236,7 +234,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     gamma_dw_kl = best_params['gamma_dw_kl']
     learning_rate = best_params['learning_rate']
     lambda_recon = best_params['lambda_recon']
-    model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
+    model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # Early stopping is added to avoid overfitting
     early_stopping = EarlyStopping(patience=early_stopping_patience*2)

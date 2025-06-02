@@ -268,10 +268,10 @@ class Prior(nn.Module):
 
 # --- VAE ---
 
-class VAE(nn.Module):
+class B_TCVAE(nn.Module):
     """Variational Autoencoder (VAE) model for Continuous Data."""
     def __init__(self, input_dim=D, latent_dim=L, hidden_dim=M):
-        super(VAE, self).__init__()
+        super(B_TCVAE, self).__init__()
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.hidden_dim = hidden_dim
@@ -457,6 +457,13 @@ class VAE(nn.Module):
         # Sample z from prior p(z) = N(0, I)
         z = self.prior.sample(batch_size=batch_size)
         # Decode z to get the mean reconstruction x' = E[p(x|z)]
+        return self.decoder.sample(z)
+
+    def reconstruct_x(self, x):
+        """Use x and reconstruct it through the Encoder and Decoder"""
+        # sample via encoder
+        z = self.encoder.sample(x)
+        # decode via decoder
         return self.decoder.sample(z)
 
     def interpolation(self, x1=None, x2=None, z1=None, z2=None, alpha=0.5):

@@ -2,8 +2,8 @@
 traffic classifier pipeline
 """
 import mlflow
-from pipeline.preprocess.preprocess_generator_vae import preprocessing
-from pipeline.train.train_traffic_b_tcvae import train
+from pipeline.preprocess.preprocess_generator_vae_gan import preprocessing
+from pipeline.train.train_traffic_b_tcvae_gan import train
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, MLFLOW_HOST, MLFLOW_PORT
 
 # Set the MLflow tracking server URI to log experiments and models
@@ -18,7 +18,7 @@ model_deployed_name = 'generative_ml_malicious_generator_b_tcvae_gan'
 # Start an MLflow run context to log parameters, metrics, and artifacts
 with mlflow.start_run() as run:
     # Define the local directory path to store results and artifacts generated during the run
-    results_folder_path = './results/generative_b_tcvae'
+    results_folder_path = './results/generative_b_tcvae_gan'
 
     # Define the file path for the base input traffic data CSV file
     base_traffic_filepath = './data/Weekly-WorkingHours_report.csv'
@@ -37,4 +37,13 @@ with mlflow.start_run() as run:
     # --- Training Step ---
     # Train the traffic classifier model using the preprocessed training data
     # It returns the file path to the saved trained model artifact
-    model_filepath = train(results_folder_path=results_folder_path, traffic_data_filepath=train_traffic_filepath, batch_size=1024)
+    scaler_model_filepath = preprocess_artifacts['scaler']
+    label_encoder_model_filepath = preprocess_artifacts['label_encoder']
+    discriminator_filepath = './results/discriminator/xgb_server_traffic_classifier.json'
+    model_filepath = train(
+        traffic_data_filepath=train_traffic_filepath,
+        results_folder_path=results_folder_path,
+        discriminator_filepath=discriminator_filepath,
+        scaler_model_filepath=scaler_model_filepath,
+        label_encoder_model_filepath=label_encoder_model_filepath,
+        batch_size=1024)

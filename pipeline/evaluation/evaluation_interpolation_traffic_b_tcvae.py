@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import torch
 import xgboost as xgb
-from ml_models.malicious_traffic_b_tcvae import VAE
+from ml_models.malicious_traffic_b_tcvae import B_TCVAE
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 import numpy as np
 import joblib
@@ -57,7 +57,7 @@ def evaluation_interpolation(model_generator_filepath: str, model_discriminator_
     latent_dim = 16
     hidden_dim = 36
     # init generative model
-    generator_model: VAE = VAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
+    generator_model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
     generator_model.load_state_dict(torch.load(model_generator_filepath))
 
     # transform source and destination instances to tensors
