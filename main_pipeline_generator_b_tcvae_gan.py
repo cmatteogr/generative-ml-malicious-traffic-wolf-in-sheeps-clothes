@@ -34,15 +34,12 @@ with mlflow.start_run() as run:
     )
 
     # --- Training Discriminator ---
-    discriminator_filepath = train_discriminator(train_traffic_filepath, results_folder_path)
+    # discriminator_filepath = train_discriminator(train_traffic_filepath, results_folder_path)
 
-    """# --- Training Generator ---
-    scaler_model_filepath = preprocess_artifacts['scaler']
-    label_encoder_model_filepath = preprocess_artifacts['label_encoder']
+    # --- Training Generator ---
+    discriminator_filepath = './results/generative_b_tcvae_gan/xgb_server_traffic_classifier.json'
     model_filepath = train_generator(
         traffic_data_filepath=train_traffic_filepath,
         results_folder_path=results_folder_path,
         discriminator_filepath=discriminator_filepath,
-        scaler_model_filepath=scaler_model_filepath,
-        label_encoder_model_filepath=label_encoder_model_filepath,
-        batch_size=1024)"""
+        batch_size=1024)

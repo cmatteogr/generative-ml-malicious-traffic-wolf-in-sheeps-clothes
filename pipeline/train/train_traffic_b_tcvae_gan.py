@@ -5,7 +5,7 @@ Author: Cesar M. Gonzalez
 import torch
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 import optuna
 import pandas as pd
 import mlflow
@@ -23,8 +23,8 @@ from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 from torch.utils.data import TensorDataset
 
 
-def train(traffic_data_filepath: str, results_folder_path: str, discriminator_filepath: str, scaler_model_filepath:str,
-          label_encoder_model_filepath: str, train_size_percentage=0.75, batch_size=1024):
+def train(traffic_data_filepath: str, results_folder_path: str, discriminator_filepath: str,
+          train_size_percentage=0.75, batch_size=1024):
     """
     Beta - Total Correlation VAE training
 
@@ -44,11 +44,6 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
     # define the device to use to train the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Load scaler model
-    scaler_model: MinMaxScaler = joblib.load(scaler_model_filepath)
-    # Load label encoder model
-    label_encoder_model: LabelEncoder = joblib.load(scaler_model_filepath)
 
     # Load the Discriminator model
     #discriminator_model = xgb.XGBClassifier()
@@ -133,24 +128,23 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             mi_loss_accum = 0.0
             tc_loss_accum = 0.0
             dw_kl_loss_accum = 0.0
+            fool_dis_loss_accum = 0.0
 
             for data, label in train_loader:
                 # Forward pass
                 data = data.to(device)
+                optimizer.zero_grad()
 
                 # use the current B_TCVAE to reconstruct
                 reconstructed_data = generative_model.reconstruct_x(data)
-                # invert data normalization to use the discriminator
-                non_normalized_data = scaler_model.inverse_transform(reconstructed_data.detach().cpu().numpy())
                 # use the discriminator to classify traffic
-                pred_label = discriminator_model.predict(non_normalized_data)
+                pred_label = discriminator_model.predict(reconstructed_data.detach().cpu().numpy())
                 # compare real and fake labels, calculate fool percentage
                 label_nparray = label.detach().cpu().numpy()
-                n_label_match = np.sum(label.detach().cpu().numpy() == pred_label)
+                n_label_match = np.sum(label_nparray == pred_label)
                 fool_fail_score_batch = 1 - (n_label_match/len(label_nparray))
 
                 data = data.to(device)
-                optimizer.zero_grad()
                 # use the model
                 reconstruction_loss_value, mi, tc, dw_kl = generative_model(data, reduction='avg')
                 # multiply by the factors
@@ -169,6 +163,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 mi_loss_accum += mi.item()
                 tc_loss_accum += tc.item()
                 dw_kl_loss_accum += dw_kl.item()
+                fool_dis_loss_accum += fool_fail_score_batch.item()
 
             # Calculate train batch loss
             avg_train_loss = train_loss_accum / len(train_loader)
@@ -177,8 +172,9 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             avg_mi_loss = mi_loss_accum / len(train_loader)
             avg_tc_loss = tc_loss_accum / len(train_loader)
             avg_dw_kl_loss = dw_kl_loss_accum / len(train_loader)
+            fool_dis_loss = fool_dis_loss_accum / len(train_loader)
 
-            print(f'train -> MSE: {avg_reconstruction_loss/lambda_recon}, MSE lambda: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}')
+            print(f'train -> MSE: {avg_reconstruction_loss/lambda_recon}, MSE lambda: {avg_reconstruction_loss}, MI: {avg_mi_loss/alpha_mi}, MI alpha:{avg_mi_loss}, TC: {avg_tc_loss/beta_tc}, TC beta:{avg_tc_loss}, DW_KL: {avg_dw_kl_loss/gamma_dw_kl}, DW_KL gamma:{avg_dw_kl_loss}, L_GAN{fool_dis_loss}')
 
             # Validation
             generative_model.eval()
@@ -188,16 +184,16 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             val_mi_loss_accum = 0.0
             val_tc_loss_accum = 0.0
             val_dw_kl_loss_accum = 0.0
+            val_fool_dis_loss_accum = 0.0
+
             with torch.no_grad():
                 for data, label in val_loader:
                     data = data.to(device)
 
                     # use the current B_TCVAE to reconstruct
                     reconstructed_data = generative_model.reconstruct_x(data)
-                    # invert data normalization to use the discriminator
-                    non_normalized_data = scaler_model.inverse_transform(reconstructed_data.detach().cpu().numpy())
                     # use the discriminator to classify traffic
-                    pred_label = discriminator_model.predict(non_normalized_data)
+                    pred_label = discriminator_model.predict(reconstructed_data.detach().cpu().numpy())
                     # compare real and fake labels, calculate fool percentage
                     label_nparray = label.detach().cpu().numpy()
                     n_label_match = np.sum(label.detach().cpu().numpy() == pred_label)
@@ -217,6 +213,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                     val_mi_loss_accum += mi.item()
                     val_tc_loss_accum += tc.item()
                     val_dw_kl_loss_accum += dw_kl.item()
+                    val_fool_dis_loss_accum += fool_fail_score_batch.item()
 
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
@@ -229,9 +226,10 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
             avg_val_mi_loss = (val_mi_loss_accum / len(val_loader)) / alpha_mi
             avg_val_tc_loss = (val_tc_loss_accum / len(val_loader)) / beta_tc
             avg_val_dw_kl_loss = (val_dw_kl_loss_accum / len(val_loader)) / gamma_dw_kl
+            avg_val_fool_dis_loss = val_fool_dis_loss_accum / len(train_loader)
 
             print(
-                f'valid -> MSE: {avg_val_reconstruction_loss / lambda_recon}, MSE lambda: {avg_val_reconstruction_loss}, MI: {avg_val_mi_loss / alpha_mi}, MI alpha:{avg_val_mi_loss}, TC: {avg_val_tc_loss / beta_tc}, TC beta:{avg_val_tc_loss}, DW_KL: {avg_val_dw_kl_loss / gamma_dw_kl}, DW_KL gamma:{avg_val_dw_kl_loss}')
+                f'valid -> MSE: {avg_val_reconstruction_loss / lambda_recon}, MSE lambda: {avg_val_reconstruction_loss}, MI: {avg_val_mi_loss / alpha_mi}, MI alpha:{avg_val_mi_loss}, TC: {avg_val_tc_loss / beta_tc}, TC beta:{avg_val_tc_loss}, DW_KL: {avg_val_dw_kl_loss / gamma_dw_kl}, DW_KL gamma:{avg_val_dw_kl_loss}, L_GAN{avg_val_fool_dis_loss}')
             epoch_duration = time.time() - epoch_start_time
             print(
                 f'  Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}, Duration: {epoch_duration:.2f}s')
@@ -256,7 +254,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v2"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v3"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
