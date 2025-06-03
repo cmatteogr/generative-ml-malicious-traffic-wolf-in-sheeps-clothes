@@ -3,7 +3,8 @@ traffic classifier pipeline
 """
 import mlflow
 from pipeline.preprocess.preprocess_generator_vae_gan import preprocessing
-from pipeline.train.train_traffic_b_tcvae_gan import train
+from pipeline.train.train_traffic_b_tcvae_gan import train as train_generator
+from pipeline.train.train_traffic_classifier import train as train_discriminator
 from utils.constants import RELEVANT_COLUMNS, VALID_TRAFFIC_TYPES, VALID_PORT_RANGE, MLFLOW_HOST, MLFLOW_PORT
 
 # Set the MLflow tracking server URI to log experiments and models
@@ -23,9 +24,7 @@ with mlflow.start_run() as run:
     # Define the file path for the base input traffic data CSV file
     base_traffic_filepath = './data/Weekly-WorkingHours_report.csv'
 
-    # --- Preprocessing Step ---
-    # Execute the preprocessing function to clean and prepare the data
-    # It returns paths to the processed train/test sets and any preprocessing artifacts (like scalers)
+    # --- Preprocessing Data ---
     train_traffic_filepath, test_traffic_filepath, preprocess_artifacts = preprocessing(
         base_traffic_filepath,
         results_folder_path,
@@ -34,16 +33,16 @@ with mlflow.start_run() as run:
         valid_port_range=VALID_PORT_RANGE        # Allowed port range
     )
 
-    # --- Training Step ---
-    # Train the traffic classifier model using the preprocessed training data
-    # It returns the file path to the saved trained model artifact
+    # --- Training Discriminator ---
+    discriminator_filepath = train_discriminator(train_traffic_filepath, results_folder_path)
+
+    """# --- Training Generator ---
     scaler_model_filepath = preprocess_artifacts['scaler']
     label_encoder_model_filepath = preprocess_artifacts['label_encoder']
-    discriminator_filepath = './results/discriminator/xgb_server_traffic_classifier.json'
-    model_filepath = train(
+    model_filepath = train_generator(
         traffic_data_filepath=train_traffic_filepath,
         results_folder_path=results_folder_path,
         discriminator_filepath=discriminator_filepath,
         scaler_model_filepath=scaler_model_filepath,
         label_encoder_model_filepath=label_encoder_model_filepath,
-        batch_size=1024)
+        batch_size=1024)"""

@@ -149,6 +149,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 n_label_match = np.sum(label.detach().cpu().numpy() == pred_label)
                 fool_fail_score_batch = 1 - (n_label_match/len(label_nparray))
 
+                data = data.to(device)
                 optimizer.zero_grad()
                 # use the model
                 reconstruction_loss_value, mi, tc, dw_kl = generative_model(data, reduction='avg')
@@ -191,12 +192,25 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 for data, label in val_loader:
                     data = data.to(device)
 
+                    # use the current B_TCVAE to reconstruct
+                    reconstructed_data = generative_model.reconstruct_x(data)
+                    # invert data normalization to use the discriminator
+                    non_normalized_data = scaler_model.inverse_transform(reconstructed_data.detach().cpu().numpy())
+                    # use the discriminator to classify traffic
+                    pred_label = discriminator_model.predict(non_normalized_data)
+                    # compare real and fake labels, calculate fool percentage
+                    label_nparray = label.detach().cpu().numpy()
+                    n_label_match = np.sum(label.detach().cpu().numpy() == pred_label)
+                    fool_fail_score_batch = 1 - (n_label_match / len(label_nparray))
+
+                    data = data.to(device)
+
                     reconstruction_loss_value, mi, tc, dw_kl = generative_model(data, reduction='avg')
                     reconstruction_loss_value = reconstruction_loss_value * lambda_recon
                     mi = mi * alpha_mi
                     tc = tc * beta_tc
                     dw_kl = dw_kl * gamma_dw_kl
-                    loss = reconstruction_loss_value + mi + tc + dw_kl
+                    loss = reconstruction_loss_value + mi + tc + dw_kl + fool_fail_score_batch
 
                     val_loss_accum += loss.item()
                     val_reconstruction_loss_accum += reconstruction_loss_value.item()
@@ -248,7 +262,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=100)
+    study.optimize(train_model, n_trials=200)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
