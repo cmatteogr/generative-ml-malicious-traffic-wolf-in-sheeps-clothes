@@ -59,7 +59,7 @@ def evaluation(model_filepath: str, data_test_filepath: str, results_folder_path
 
     # plot the latent space in 3D
     latent_space_pca_filepath = os.path.join(results_folder_path, "vae_latent_space_pca_bvea.html")
-    plot_latent_space_vae(z.detach().numpy(), labels, labels, latent_space_pca_filepath)
+    plot_latent_space_vae(z.detach().numpy(), labels, latent_space_pca_filepath)
 
     # generate comparison data report
     # sample data from the VAE

@@ -76,7 +76,9 @@ def plot_instances_by_features_interactive(df, feature_a, feature_b, feature_c):
     # Show the interactive plot
     fig.show()
 
-def plot_latent_space_vae(z_tensors, z_labels, results_filepath,
+def plot_latent_space_vae(z_tensors,
+                          z_labels,
+                          results_filepath,
                           market_size=2,
                           plot_columns=['PCA1', 'PCA2', 'PCA3'],
                           plot_title='VAE Latent Space (PCA - 3 Components)',
