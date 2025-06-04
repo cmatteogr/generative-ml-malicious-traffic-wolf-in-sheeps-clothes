@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from pipeline.postprocessing.postprocessing_base import post_process_data
+
 D = 42  # input dimension by default
 L = 22   # number of latents by default
 M = 36  # hidden layer dimension bu default
@@ -209,6 +211,10 @@ class Decoder(nn.Module):
         # The decoder reconstructs the input x from the latent variable z
         # The goal is train the decoder parameters to do it. Keeping in mind z is a Gaussian Like distribution, and we are generating a "mapping" between two distributions: x, z
         mu_d = self.decoder(z)
+
+        # apply postprocessing
+        mu_d = post_process_data(mu_d)
+
         return mu_d # Return the predicted mean
 
     def sample(self, z):

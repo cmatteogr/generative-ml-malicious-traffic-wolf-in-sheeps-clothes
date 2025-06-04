@@ -2,7 +2,7 @@
 preprocess base operations
 """
 import pandas as pd
-from typing import List # Import List for type hinting
+from typing import List
 
 
 def map_port_usage_category(port: int) -> str:
