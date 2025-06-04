@@ -218,7 +218,6 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
                         raise optuna.exceptions.TrialPruned()
-                    val_loss_accum += loss.item()
 
             avg_val_loss = val_loss_accum / len(val_loader)
 
