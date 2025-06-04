@@ -97,7 +97,11 @@ def preprocessing(traffic_filepath: str,
     power_columns = ['Total Length of Fwd Packets', 'Total Length of Bwd Packets', 'Flow Duration',
                      'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
                      'Bwd Packet Length Std', 'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Total', 'Fwd IAT Mean',
-                     'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std']
+                     'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std',
+
+                     'Total Fwd Packets', 'Total Backward Packets', 'Fwd Header Length', 'Bwd Header Length'
+                     'Subflow Fwd Packets', 'Subflow Fwd Bytes', 'Subflow Bwd Packets', 'Subflow Bwd Bytes',
+                     'Init_Win_bytes_backward', 'act_data_pkt_fwd', 'Active Mean', 'Active Std', 'Idle Std']
     # Ensure all power columns exist in the dataframe after outlier removal
     power_columns = [col for col in power_columns if col in X_train.columns]
     pt_model = PowerTransformer(method='yeo-johnson')

@@ -72,6 +72,8 @@ def evaluation_interpolation(model_generator_filepath: str, model_discriminator_
     # star from source
     z_chain_labels = [source_label]
     z_chain = [source_z]
+    rx_chain = [source_instance_tensor.cpu().numpy()[0]]
+    rx_chain_labels = [source_label]
     # for each interpolation instance add to chain
     percentage_steps = 0.02
     for step_percentage in np.arange(0, 1, percentage_steps):
@@ -87,10 +89,14 @@ def evaluation_interpolation(model_generator_filepath: str, model_discriminator_
         # append interpolation and label to chain
         z_chain.append(z_interp)
         z_chain_labels.append(pred_label[0])
+        rx_chain.append(reconstructed_sample[0])
+        rx_chain_labels.append(pred_label[0])
 
     # append destination instance
     z_chain.append(destination_z)
     z_chain_labels.append(destination_label)
+    rx_chain.append(destination_instance_data.cpu().numpy()[0])
+    rx_chain_labels.append(destination_label)
 
     # concatenate all the tensors instances
     z_tensor_chain = torch.cat(z_chain, dim=0)
@@ -101,3 +107,11 @@ def evaluation_interpolation(model_generator_filepath: str, model_discriminator_
     plot_title = 'B-TCVAE-GAN Latent Space'
     plot_latent_space_vae(z_tensor_chain.detach().numpy(), z_chain_labels, results_filepath,
                           market_size=4, plot_title=plot_title, equal_range_axis=True)
+
+    # save reconstructed samples
+    columns = list(traffic_df.columns)
+    columns.remove('Label')
+
+    interpolation_results_filepath = os.path.join(results_folder_path, "interpolation_results.csv")
+    rx_chain_df = pd.DataFrame(rx_chain, columns=columns)
+    rx_chain_df.to_csv(interpolation_results_filepath, index=False)

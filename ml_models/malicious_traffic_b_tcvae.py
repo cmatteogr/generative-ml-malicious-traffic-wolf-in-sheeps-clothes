@@ -1,10 +1,9 @@
 """
 Beta - Total Correlation Variational Autoencoder. b-tcvae
 """
-import math # Use math.pi
+import math
 import torch
 import torch.nn as nn
-import numpy as np
 
 from pipeline.postprocessing.postprocessing_base import post_process_data
 
@@ -243,8 +242,8 @@ class Decoder(nn.Module):
         # We return a value ~ log p(x|z) per batch item.
         # Let's return -sum((x - mu_d)**2) which is proportional to log p(x|z) up to constants.
         # This one here is the MSE formula
-        neg_sum_sq_error = -torch.sum((x - mu_d)**2, dim=1) # Sum over feature dimension D
-        return neg_sum_sq_error
+        sum_sq_error = torch.sum((x - mu_d)**2, dim=1)
+        return sum_sq_error
 
 
 # --- Prior ---
@@ -363,7 +362,7 @@ class B_TCVAE(nn.Module):
         # The books 'Understanding Deep Learning' and 'Deep Generative Modeling' explains better how it's used in the VAE.
 
         # We use -SumSqError which is proportional to log p(x|z) for fixed variance Gaussian
-        log_px_given_z = self.decoder.log_prob(x, z) # Shape: (batch_size,)
+        sum_sq_error = self.decoder.log_prob(x, z)
 
         # Instead of the KL divergence like in the b-VAE
         # we use 3 metrics to guarantee:
@@ -435,24 +434,19 @@ class B_TCVAE(nn.Module):
         # -ELBO = KL - log_px_given_z
         # If log_px_given_z = -SumSqError, then -ELBO = KL + SumSqError
         # This matches the common VAE loss: Reconstruction Loss + KL Divergence
-        # Let's define Reconstruction Loss = -log_px_given_z
-        reconstruction_loss = -log_px_given_z
+
         # Now, ELBO is the sum of both terms, MSE and KL Divergence, the goal is minimize this metric, that way we ensure
         # the VAE reconstructs the x instances as well as possible and Maps as good as possible the input distribution and the latent distribution (Gaussian like)
         # Remember using an approximation and the function depends on the VAE parameters, it means weights.
         #neg_elbo = reconstruction_loss + KL
 
-        # encoder
-        mu_e, log_var_e = self.encoder.encode(x)
-        z = self.encoder.sample(mu_e=mu_e, log_var_e=log_var_e)
-
         # Return average or sum of negative ELBO (loss to be minimized)
         # We are using batches so it make sense
         # TODO: Check if the MI, TC and DW_KL could have this sum and average effect, for now in both return the same value
         if reduction == 'sum':
-            reconstruction_loss_value = reconstruction_loss.sum()
+            reconstruction_loss_value = sum_sq_error.sum()
         else:
-            reconstruction_loss_value = reconstruction_loss.mean()
+            reconstruction_loss_value = sum_sq_error.mean()
 
         # return all the metrics
         return reconstruction_loss_value, mi, tc, dw_kl

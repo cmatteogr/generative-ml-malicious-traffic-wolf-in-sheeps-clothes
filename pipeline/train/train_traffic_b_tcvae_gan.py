@@ -22,6 +22,8 @@ from sklearn.preprocessing import LabelEncoder
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 from torch.utils.data import TensorDataset
 
+from utils.utils import generate_profiling_report
+
 
 def train(traffic_data_filepath: str, results_folder_path: str, discriminator_filepath: str,
           train_size_percentage=0.75, batch_size=1024):
@@ -51,6 +53,12 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
+    title = "Train dataset Profiling"
+    report_name = 'traffic_train_dataset_profiling_generator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=traffic_data_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # remove label column from X features
     labels = traffic_df.pop('Label')

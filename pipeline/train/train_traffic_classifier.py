@@ -3,7 +3,6 @@ train traffic classifier
 """
 
 import numpy as np
-from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier
 from sklearn.metrics import f1_score
 import mlflow
@@ -14,6 +13,7 @@ import os
 
 from utils.constants import TRAFFIC_CLASSIFIER_MODEL_FILENAME
 from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
+from utils.utils import generate_profiling_report
 
 
 def train(data_train_filepath: str, results_folder_path: str) -> str:
@@ -25,6 +25,12 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
     # read traffic data
     print("read train traffic data")
     traffic_df = pd.read_csv(data_train_filepath)
+    title = "Train dataset Profiling"
+    report_name = 'traffic_train_dataset_profiling_discriminator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=data_train_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # get features and label
     y_train = traffic_df.pop('Label')
