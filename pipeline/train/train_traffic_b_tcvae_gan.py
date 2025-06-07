@@ -13,12 +13,10 @@ import os
 import time
 import xgboost as xgb
 import numpy as np
-import joblib
 from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_b_tcvae import B_TCVAE
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import LabelEncoder
+import onnxruntime as rt
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
 from torch.utils.data import TensorDataset
 
@@ -46,10 +44,6 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
     # define the device to use to train the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Load the Discriminator model
-    #discriminator_model = xgb.XGBClassifier()
-    #discriminator_model.load_model(discriminator_filepath)
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
@@ -120,8 +114,12 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
         early_stopping = EarlyStopping(patience=early_stopping_patience)
 
         # Load the Discriminator model
-        discriminator_model = xgb.XGBClassifier()
-        discriminator_model.load_model(discriminator_filepath)
+        # NOTE: we need to initialize the model here to use Optuna, maybe it could be initialized out of the function. it's a TODO
+        onnx_session = rt.InferenceSession(discriminator_filepath, providers=['CPUExecutionProvider'])
+        input_name = onnx_session.get_inputs()[0].name
+        label_name = onnx_session.get_outputs()[0].name
+        #discriminator_model = xgb.XGBClassifier()
+        #discriminator_model.load_model(discriminator_filepath)
 
         # Training loop
         print('training Beta-TCVAE-GAN model')
@@ -143,10 +141,17 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 data = data.to(device)
                 optimizer.zero_grad()
 
+
                 # use the current B_TCVAE to reconstruct
                 reconstructed_data = generative_model.reconstruct_x(data)
                 # use the discriminator to classify traffic
-                pred_label = discriminator_model.predict(reconstructed_data.detach().cpu().numpy())
+
+                reconstructed_data_np = reconstructed_data.detach().cpu().numpy().astype(np.float32)
+                pred_label_onnx = onnx_session.run([label_name], {input_name: reconstructed_data_np})[0]
+                pred_label = pred_label_onnx
+                #reconstructed_data_np = reconstructed_data.detach().cpu().numpy()
+                #pred_label = discriminator_model.predict(reconstructed_data_np)
+
                 # compare real and fake labels, calculate fool percentage
                 label_nparray = label.detach().cpu().numpy()
                 n_label_match = np.sum(label_nparray == pred_label)
@@ -261,7 +266,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v5"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v6"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,

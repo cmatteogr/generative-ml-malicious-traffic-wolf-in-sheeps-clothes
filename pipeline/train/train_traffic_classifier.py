@@ -14,9 +14,11 @@ import os
 from utils.constants import TRAFFIC_CLASSIFIER_MODEL_FILENAME
 from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
 from utils.utils import generate_profiling_report
+from skl2onnx.common.data_types import FloatTensorType
+import skl2onnx
 
 
-def train(data_train_filepath: str, results_folder_path: str) -> str:
+def train(data_train_filepath: str, results_folder_path: str) -> tuple:
     """
     Train traffic classification model
     :param data_train_filepath: data file path
@@ -35,6 +37,7 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
     # get features and label
     y_train = traffic_df.pop('Label')
     X_train = traffic_df.copy()
+    n_features = len(X_train.columns)
 
     # Define XGBoost model
     xgb_model = XGBClassifier(objective='multi:softprob', num_class=len(np.unique(y_train)), device="cuda",
@@ -87,6 +90,14 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
     # log model as artifact
     mlflow.log_artifact(model_filepath)
 
+    # save model onnx
+    initial_type = [('float_input', FloatTensorType([None, n_features]))]
+    # convert to ONNX and save
+    model_onnx_filepath = os.path.join(results_folder_path, 'xgb_server_traffic_classifier.onnx')
+    onnx_model = skl2onnx.convert_sklearn(xgb_model, initial_types=initial_type)
+    with open(model_onnx_filepath, "wb") as f:
+        f.write(onnx_model.SerializeToString())
+
     # plot model features relevance
     features_relevance_model_plot = os.path.join(results_folder_path, "features_relevance_model.png")
     xgboost_plot_features_relevance(best_model, features_relevance_model_plot)
@@ -94,5 +105,5 @@ def train(data_train_filepath: str, results_folder_path: str) -> str:
     mlflow.log_artifact(features_relevance_model_plot)
 
     # return model filepath
-    return model_filepath
+    return model_filepath, model_onnx_filepath
 
