@@ -10,13 +10,11 @@ from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 import pandas as pd
 import os
-
+from onnxmltools import convert_xgboost
 from utils.constants import TRAFFIC_CLASSIFIER_MODEL_FILENAME
 from utils.plots import generate_confusion_matrix_plot, xgboost_plot_features_relevance
 from utils.utils import generate_profiling_report
-from skl2onnx.common.data_types import FloatTensorType
-import skl2onnx
-
+from onnxconverter_common.data_types import FloatTensorType
 
 def train(data_train_filepath: str, results_folder_path: str) -> tuple:
     """
@@ -91,10 +89,10 @@ def train(data_train_filepath: str, results_folder_path: str) -> tuple:
     mlflow.log_artifact(model_filepath)
 
     # save model onnx
-    initial_type = [('float_input', FloatTensorType([None, n_features]))]
+    initial_types = [('input', FloatTensorType([None, n_features]))]
     # convert to ONNX and save
     model_onnx_filepath = os.path.join(results_folder_path, 'xgb_server_traffic_classifier.onnx')
-    onnx_model = skl2onnx.convert_sklearn(best_model, initial_types=initial_type)
+    onnx_model = convert_xgboost(best_model, initial_types=initial_types)
     with open(model_onnx_filepath, "wb") as f:
         f.write(onnx_model.SerializeToString())
 

@@ -147,7 +147,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 # use the discriminator to classify traffic
 
                 reconstructed_data_np = reconstructed_data.detach().cpu().numpy().astype(np.float32)
-                pred_label_onnx = onnx_session.run([label_name], {input_name: reconstructed_data_np})[0]
+                pred_label_onnx = onnx_session.run([label_name], {input_name: reconstructed_data_np})
                 pred_label = pred_label_onnx
                 #reconstructed_data_np = reconstructed_data.detach().cpu().numpy()
                 #pred_label = discriminator_model.predict(reconstructed_data_np)
