@@ -94,7 +94,7 @@ def train(data_train_filepath: str, results_folder_path: str) -> tuple:
     initial_type = [('float_input', FloatTensorType([None, n_features]))]
     # convert to ONNX and save
     model_onnx_filepath = os.path.join(results_folder_path, 'xgb_server_traffic_classifier.onnx')
-    onnx_model = skl2onnx.convert_sklearn(xgb_model, initial_types=initial_type)
+    onnx_model = skl2onnx.convert_sklearn(best_model, initial_types=initial_type)
     with open(model_onnx_filepath, "wb") as f:
         f.write(onnx_model.SerializeToString())
 
