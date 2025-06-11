@@ -115,11 +115,11 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
         # Load the Discriminator model
         # NOTE: we need to initialize the model here to use Optuna, maybe it could be initialized out of the function. it's a TODO
-        onnx_session = rt.InferenceSession(discriminator_filepath, providers=['CPUExecutionProvider'])
-        input_name = onnx_session.get_inputs()[0].name
-        label_name = onnx_session.get_outputs()[0].name
-        #discriminator_model = xgb.XGBClassifier()
-        #discriminator_model.load_model(discriminator_filepath)
+        #onnx_session = rt.InferenceSession(discriminator_filepath, providers=['CPUExecutionProvider'])
+        #input_name = onnx_session.get_inputs()[0].name
+        #label_name = onnx_session.get_outputs()[0].name
+        discriminator_model = xgb.XGBClassifier(device=device)
+        discriminator_model.load_model(discriminator_filepath)
 
         # Training loop
         print('training Beta-TCVAE-GAN model')
@@ -146,11 +146,11 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                 reconstructed_data = generative_model.reconstruct_x(data)
                 # use the discriminator to classify traffic
 
-                reconstructed_data_np = reconstructed_data.detach().cpu().numpy().astype(np.float32)
-                pred_label_onnx = onnx_session.run([label_name], {input_name: reconstructed_data_np})
-                pred_label = pred_label_onnx
+                #reconstructed_data_np = reconstructed_data.detach().cpu().numpy().astype(np.float32)
+                #pred_label_onnx = onnx_session.run([label_name], {input_name: reconstructed_data_np})
+                #pred_label = pred_label_onnx
                 #reconstructed_data_np = reconstructed_data.detach().cpu().numpy()
-                #pred_label = discriminator_model.predict(reconstructed_data_np)
+                pred_label = discriminator_model.predict(reconstructed_data.detach())
 
                 # compare real and fake labels, calculate fool percentage
                 label_nparray = label.detach().cpu().numpy()
@@ -206,7 +206,8 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
                     # use the current B_TCVAE to reconstruct
                     reconstructed_data = generative_model.reconstruct_x(data)
                     # use the discriminator to classify traffic
-                    pred_label = discriminator_model.predict(reconstructed_data.detach().cpu().numpy())
+                    pred_label = discriminator_model.predict(reconstructed_data.detach())
+                    # pred_label = discriminator_model.predict(reconstructed_data.detach().cpu().numpy())
                     # compare real and fake labels, calculate fool percentage
                     label_nparray = label.detach().cpu().numpy()
                     n_label_match = np.sum(label_nparray == pred_label)
@@ -266,7 +267,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v6"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v7"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,

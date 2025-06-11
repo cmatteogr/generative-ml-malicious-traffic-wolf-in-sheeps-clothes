@@ -89,12 +89,12 @@ def train(data_train_filepath: str, results_folder_path: str) -> tuple:
     mlflow.log_artifact(model_filepath)
 
     # save model onnx
-    initial_types = [('input', FloatTensorType([None, n_features]))]
+    #initial_types = [('input', FloatTensorType([None, n_features]))]
     # convert to ONNX and save
     model_onnx_filepath = os.path.join(results_folder_path, 'xgb_server_traffic_classifier.onnx')
-    onnx_model = convert_xgboost(best_model, initial_types=initial_types)
-    with open(model_onnx_filepath, "wb") as f:
-        f.write(onnx_model.SerializeToString())
+    #onnx_model = convert_xgboost(best_model, initial_types=initial_types)
+    #with open(model_onnx_filepath, "wb") as f:
+    #    f.write(onnx_model.SerializeToString())
 
     # plot model features relevance
     features_relevance_model_plot = os.path.join(results_folder_path, "features_relevance_model.png")
