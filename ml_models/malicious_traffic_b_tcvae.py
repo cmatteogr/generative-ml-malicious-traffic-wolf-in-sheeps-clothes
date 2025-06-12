@@ -212,7 +212,7 @@ class Decoder(nn.Module):
         mu_d = self.decoder(z)
 
         # apply postprocessing
-        # mu_d = post_process_data(mu_d)
+        mu_d = post_process_data(mu_d)
 
         return mu_d # Return the predicted mean
 
