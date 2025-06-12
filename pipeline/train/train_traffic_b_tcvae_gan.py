@@ -43,7 +43,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
     print('check training input arguments')
     assert 0.7 <= train_size_percentage < 1, 'Train size percentage should be between 0.7 and 1.'
     # define the device to use to train the model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda")
 
     # Convert to PyTorch tensor
     traffic_df = pd.read_csv(traffic_data_filepath)
@@ -118,8 +118,9 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
         #onnx_session = rt.InferenceSession(discriminator_filepath, providers=['CPUExecutionProvider'])
         #input_name = onnx_session.get_inputs()[0].name
         #label_name = onnx_session.get_outputs()[0].name
-        discriminator_model = xgb.XGBClassifier(device=device)
+        discriminator_model = xgb.XGBClassifier(device="cuda")
         discriminator_model.load_model(discriminator_filepath)
+        discriminator_model.set_params(device="cuda")
 
         # Training loop
         print('training Beta-TCVAE-GAN model')
@@ -267,7 +268,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v7"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v11"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,

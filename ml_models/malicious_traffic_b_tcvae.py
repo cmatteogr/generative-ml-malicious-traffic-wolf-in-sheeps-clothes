@@ -212,7 +212,7 @@ class Decoder(nn.Module):
         mu_d = self.decoder(z)
 
         # apply postprocessing
-        mu_d = post_process_data(mu_d)
+        # mu_d = post_process_data(mu_d)
 
         return mu_d # Return the predicted mean
 
@@ -242,8 +242,8 @@ class Decoder(nn.Module):
         # We return a value ~ log p(x|z) per batch item.
         # Let's return -sum((x - mu_d)**2) which is proportional to log p(x|z) up to constants.
         # This one here is the MSE formula
-        sum_sq_error = torch.sum((x - mu_d)**2, dim=1)
-        return sum_sq_error
+        neg_sum_sq_error = -torch.sum((x - mu_d)**2, dim=1)
+        return neg_sum_sq_error
 
 
 # --- Prior ---
@@ -362,7 +362,8 @@ class B_TCVAE(nn.Module):
         # The books 'Understanding Deep Learning' and 'Deep Generative Modeling' explains better how it's used in the VAE.
 
         # We use -SumSqError which is proportional to log p(x|z) for fixed variance Gaussian
-        sum_sq_error = self.decoder.log_prob(x, z)
+        # sum_sq_error = self.decoder.log_prob(x, z)
+        log_px_given_z = self.decoder.log_prob(x, z)
 
         # Instead of the KL divergence like in the b-VAE
         # we use 3 metrics to guarantee:
@@ -435,6 +436,7 @@ class B_TCVAE(nn.Module):
         # If log_px_given_z = -SumSqError, then -ELBO = KL + SumSqError
         # This matches the common VAE loss: Reconstruction Loss + KL Divergence
 
+        reconstruction_loss = -log_px_given_z
         # Now, ELBO is the sum of both terms, MSE and KL Divergence, the goal is minimize this metric, that way we ensure
         # the VAE reconstructs the x instances as well as possible and Maps as good as possible the input distribution and the latent distribution (Gaussian like)
         # Remember using an approximation and the function depends on the VAE parameters, it means weights.
@@ -444,9 +446,9 @@ class B_TCVAE(nn.Module):
         # We are using batches so it make sense
         # TODO: Check if the MI, TC and DW_KL could have this sum and average effect, for now in both return the same value
         if reduction == 'sum':
-            reconstruction_loss_value = sum_sq_error.sum()
+            reconstruction_loss_value = reconstruction_loss.sum()
         else:
-            reconstruction_loss_value = sum_sq_error.mean()
+            reconstruction_loss_value = reconstruction_loss.mean()
 
         # return all the metrics
         return reconstruction_loss_value, mi, tc, dw_kl

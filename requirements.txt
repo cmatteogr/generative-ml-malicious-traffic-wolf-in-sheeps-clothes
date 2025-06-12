@@ -13,6 +13,6 @@ optuna~=4.3.0
 torchinfo~=1.8.0
 overrides~=7.7.0
 scikit-optimize~=0.10.2
-onnxmltools~=1.13.0
+onnxmltools~=1.14.0
 onnxconverter-common~=1.13.0
 onnxruntime~=1.22.0
