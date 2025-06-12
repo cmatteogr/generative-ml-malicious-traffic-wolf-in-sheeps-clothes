@@ -6,6 +6,7 @@ outlier removal, transformation, and sampling.
 """
 import json
 import os.path
+from operator import index
 from typing import List, Tuple, Dict
 from sklearn.ensemble import IsolationForest
 import pandas as pd
@@ -18,6 +19,7 @@ import joblib
 from sklearn.preprocessing import LabelEncoder
 from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, \
     PREPROCESS_PARAMS_NAME, SCALER_NAME, LABEL_ENCODER_NAME
+from utils.utils import generate_profiling_report
 
 
 def preprocessing(traffic_filepath: str,
@@ -79,6 +81,17 @@ def preprocessing(traffic_filepath: str,
     # filter by rules defined in preprocess_base
     traffic_df = filter_valid_traffic_features(traffic_df, min_port, max_port, valid_traffic_types)
     print(f'shape after initial filtering: {traffic_df.shape}')
+
+    # generate dataset profiling report, raw dataset
+    raw_traffic_df = traffic_df.sample(800000)
+    raw_traffic_filepath = os.path.join(results_folder_path, 'raw_traffic.csv')
+    raw_traffic_df.to_csv(raw_traffic_filepath, index=False)
+    title = "Raw dataset Profiling"
+    report_name = 'preprocessing_traffic_raw_dataset_profiling_generator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=raw_traffic_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # --- Train/Test Split ---
     print(f'splitting data with test_size={test_size}')
@@ -231,6 +244,15 @@ def preprocessing(traffic_filepath: str,
     # Save to CSV
     X_train.to_csv(train_normalized_traffic_filepath, index=False)
     X_test.to_csv(test_normalized_traffic_filepath, index=False)
+
+    # generate dataset profiling report
+    title = "Preprocessing Train dataset Profiling"
+    report_name = 'preprocessing_traffic_train_dataset_profiling_generator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title,
+                              data_filepath=train_normalized_traffic_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # --- 12. Log Parameters and Artifacts ---
     print('Logging parameters and preparing artifacts dictionary...')
