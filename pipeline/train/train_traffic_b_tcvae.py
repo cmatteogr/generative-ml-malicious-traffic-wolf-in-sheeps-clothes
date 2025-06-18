@@ -171,18 +171,19 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                 for data in val_loader:
                     data = data.to(device)
 
-                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
-                    reconstruction_loss_value = reconstruction_loss_value * lambda_recon
-                    mi = mi * alpha_mi
-                    tc = tc * beta_tc
-                    dw_kl = dw_kl * gamma_dw_kl
-                    loss = reconstruction_loss_value + mi + tc + dw_kl
+                    with autocast(dtype=torch.float16):
+                        reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                        reconstruction_loss_value = reconstruction_loss_value * lambda_recon
+                        mi = mi * alpha_mi
+                        tc = tc * beta_tc
+                        dw_kl = dw_kl * gamma_dw_kl
+                        loss = reconstruction_loss_value + mi + tc + dw_kl
 
-                    val_loss_accum += loss.item()
-                    val_reconstruction_loss_accum += reconstruction_loss_value.item()
-                    val_mi_loss_accum += mi.item()
-                    val_tc_loss_accum += tc.item()
-                    val_dw_kl_loss_accum += dw_kl.item()
+                        val_loss_accum += loss.item()
+                        val_reconstruction_loss_accum += reconstruction_loss_value.item()
+                        val_mi_loss_accum += mi.item()
+                        val_tc_loss_accum += tc.item()
+                        val_dw_kl_loss_accum += dw_kl.item()
 
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
