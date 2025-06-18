@@ -13,7 +13,8 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, PowerTransformer
-from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features
+from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features, \
+    undersampling_dataset
 import mlflow
 import joblib
 from sklearn.preprocessing import LabelEncoder
@@ -83,7 +84,7 @@ def preprocessing(traffic_filepath: str,
     print(f'shape after initial filtering: {traffic_df.shape}')
 
     # generate dataset profiling report, raw dataset
-    raw_traffic_df = traffic_df.sample(800000)
+    raw_traffic_df = undersampling_dataset(valid_traffic_types, traffic_df.copy(), n_instances_per_traffic_type)
     raw_traffic_filepath = os.path.join(results_folder_path, 'raw_traffic.csv')
     raw_traffic_df.to_csv(raw_traffic_filepath, index=False)
     title = "Raw dataset Profiling"
@@ -105,16 +106,68 @@ def preprocessing(traffic_filepath: str,
     X_test.loc[:, 'Source Port'] = X_test['Source Port'].map(map_port_usage_category)
     X_test.loc[:, 'Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
 
+    # --- Feature Engineering: Remove Outliers per Feature ---
+    max_quantile_total_fwd_packets = X_train['Total Fwd Packets'].quantile(0.95)
+    max_quantile_total_bwd_packets = X_train['Total Backward Packets'].quantile(0.95)
+    max_quantile_total_length_fwd_packets = X_train['Total Length of Fwd Packets'].quantile(0.95)
+    max_quantile_total_length_bwd_packets = X_train['Total Length of Bwd Packets'].quantile(0.95)
+    max_quantile_fwd_header_length = X_train['Fwd Header Length'].quantile(0.95)
+    max_quantile_bwd_header_length = X_train['Bwd Header Length'].quantile(0.95)
+    max_quantile_subflow_fwd_packets = X_train['Subflow Fwd Packets'].quantile(0.95)
+    max_quantile_subflow_bwd_packets = X_train['Subflow Bwd Packets'].quantile(0.95)
+    max_quantile_act_data_pkt_fwd = X_train['act_data_pkt_fwd'].quantile(0.95)
+
+    # the quantile 95 for 'Total Fwd Packets' is 26 and max value ~ 218658, a long tail, power transformation maybe unnecessary
+    # the quantile 95 for 'Total Backward Packets' is 26 and max value ~ 218658, a long tail, power transformation maybe unnecessary
+    #X_train = X_train.loc[X_train['Total Fwd Packets'] <= max_quantile_total_fwd_packets]
+    #X_train = X_train.loc[X_train['Total Backward Packets'] <= max_quantile_total_bwd_packets]
+    #X_train = X_train.loc[X_train['Total Length of Fwd Packets'] <= max_quantile_total_length_fwd_packets]
+    #X_train = X_train.loc[X_train['Total Length of Bwd Packets'] <= max_quantile_total_length_bwd_packets]
+    X_train = X_train.loc[X_train['Fwd Header Length'] <= max_quantile_fwd_header_length]
+    X_train = X_train.loc[X_train['Bwd Header Length'] <= max_quantile_bwd_header_length]
+    X_train = X_train.loc[X_train['Subflow Fwd Packets'] <= max_quantile_subflow_fwd_packets]
+    X_train = X_train.loc[X_train['Subflow Bwd Packets'] <= max_quantile_subflow_bwd_packets]
+    X_train = X_train.loc[X_train['act_data_pkt_fwd'] <= max_quantile_act_data_pkt_fwd]
+    # ----
+    #X_test = X_test.loc[X_test['Total Fwd Packets'] <= max_quantile_total_fwd_packets]
+    #X_test = X_test.loc[X_test['Total Backward Packets'] <= max_quantile_total_bwd_packets]
+    #X_test = X_test.loc[X_test['Total Length of Fwd Packets'] <= max_quantile_total_length_fwd_packets]
+    #X_test = X_test.loc[X_test['Total Length of Bwd Packets'] <= max_quantile_total_length_bwd_packets]
+    X_test = X_test.loc[X_test['Fwd Header Length'] <= max_quantile_fwd_header_length]
+    X_test = X_test.loc[X_test['Bwd Header Length'] <= max_quantile_bwd_header_length]
+    X_test = X_test.loc[X_test['Subflow Fwd Packets'] <= max_quantile_subflow_fwd_packets]
+    X_test = X_test.loc[X_test['Subflow Bwd Packets'] <= max_quantile_subflow_bwd_packets]
+    X_test = X_test.loc[X_test['act_data_pkt_fwd'] <= max_quantile_act_data_pkt_fwd]
+
+
     print('apply Power Transformation (Yeo-Johnson), for features with long tail')
     # Define columns for power transformation
-    power_columns = ['Total Length of Fwd Packets', 'Total Length of Bwd Packets', 'Flow Duration',
-                     'Fwd Packet Length Mean', 'Fwd Packet Length Std', 'Bwd Packet Length Mean',
-                     'Bwd Packet Length Std', 'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Total', 'Fwd IAT Mean',
-                     'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std',
+    power_columns = [
+        'Total Length of Fwd Packets',
+        'Total Length of Bwd Packets',
+        'Flow Duration',
+        'Fwd Packet Length Mean', 'Fwd Packet Length Std',
+        #'Bwd Packet Length Mean',
+        #'Bwd Packet Length Std',
+        'Flow IAT Mean', 'Flow IAT Std',
+        #'Fwd IAT Total',
+        'Fwd IAT Mean',
+        'Fwd IAT Std', 'Bwd IAT Total', 'Bwd IAT Mean', 'Bwd IAT Std',
 
-                     'Total Fwd Packets', 'Total Backward Packets', 'Fwd Header Length', 'Bwd Header Length'
-                     'Subflow Fwd Packets', 'Subflow Fwd Bytes', 'Subflow Bwd Packets', 'Subflow Bwd Bytes',
-                     'Init_Win_bytes_backward', 'act_data_pkt_fwd', 'Active Mean', 'Active Std', 'Idle Std']
+        'Total Fwd Packets',
+        'Total Backward Packets',
+        #'Fwd Header Length',
+        #'Bwd Header Length'
+        #'Subflow Fwd Packets',
+        #'Subflow Fwd Bytes',
+        #'Subflow Bwd Packets',
+        #'Subflow Bwd Bytes',
+        #'Init_Win_bytes_backward',
+        #'act_data_pkt_fwd',
+        'Active Mean',
+        'Active Std',
+        'Idle Std'
+    ]
     # Ensure all power columns exist in the dataframe after outlier removal
     power_columns = [col for col in power_columns if col in X_train.columns]
     pt_model = PowerTransformer(method='yeo-johnson')
@@ -199,26 +252,7 @@ def preprocessing(traffic_filepath: str,
     print('applying undersampling to balance training data')
     X_train_temp = X_train.copy()  # Work on a copy
 
-    x_train_traffic_df_list = []
-    for valid_traffic_type in valid_traffic_types:
-        # Filter by type
-        x_train_traffic_type_df = X_train_temp.loc[X_train_temp['Label'] == valid_traffic_type]
-        n_available = x_train_traffic_type_df.shape[0]
-
-        # Check if there are enough instances and if sampling is needed
-        if n_available > n_instances_per_traffic_type:
-            print(f"sampling {n_instances_per_traffic_type} instances for type '{valid_traffic_type}'")
-            x_train_traffic_type_df = x_train_traffic_type_df.sample(n=n_instances_per_traffic_type, random_state=42)
-        elif n_available > 0:
-            print(f"keeping all {n_available} instances for type '{valid_traffic_type}'")
-        else:
-            print(f"Warning: No instances found for type '{valid_traffic_type}' after previous steps.")
-            continue
-        # Append the sampled/kept data
-        x_train_traffic_df_list.append(x_train_traffic_type_df)
-
-    # Concatenate sampled dataframes
-    X_train = pd.concat(x_train_traffic_df_list, axis=0)
+    X_train = undersampling_dataset(valid_traffic_types, X_train_temp, n_instances_per_traffic_type)
 
     # add labels
     X_train['Label'] = label_train[X_train.index]

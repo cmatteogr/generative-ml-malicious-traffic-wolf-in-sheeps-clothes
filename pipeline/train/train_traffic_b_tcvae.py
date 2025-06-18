@@ -15,6 +15,9 @@ from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_b_tcvae import B_TCVAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
+from torch.cuda.amp import autocast, GradScaler
+import torch.backends.cudnn
+torch.backends.cudnn.benchmark = True
 
 
 def train(traffic_data_filepath: str, results_folder_path: str, train_size_percentage=0.75, batch_size=1024):
@@ -52,8 +55,8 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     train_dataset, val_dataset = random_split(tensor_data, [train_size, val_size])
 
     # Create DataLoader
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Init the autoencoder Hyperparameters
     num_epochs = 550
@@ -68,9 +71,9 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     def train_model(trial):
         # Init the Hyperparameters to change
-        learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-2, log=True)
-        hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
-        latent_dim = trial.suggest_int('latent_dim', 12, 22)
+        learning_rate = trial.suggest_float('learning_rate', 1e-8, 1e-2, log=True)
+        hidden_dim = trial.suggest_int('hidden_dim', 64, 256)
+        latent_dim = trial.suggest_int('latent_dim', 16, 32)
 
         # lambda for MSE, lower as possible
         lambda_recon = trial.suggest_float('lambda_recon', 10.0, 12.0)
@@ -78,10 +81,19 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
         alpha_mi = trial.suggest_float('alpha_mi', 0.6, 0.8)
         # beta for Total Correlation, lower as possible
-        beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
+        beta_tc = trial.suggest_float('beta_tc', 0.1, 5.0)
+        # beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
         # gamma for Dimension-wise KL, around 1.0
         #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.8, 5.0)
         gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.6, 0.8)
+
+        print("learning_rate:", learning_rate)
+        print("hidden_dim:", hidden_dim)
+        print("latent_dim:", latent_dim)
+        print("lambda_recon:", lambda_recon)
+        print("alpha_mi:", alpha_mi)
+        print("beta_tc:", beta_tc)
+        print("gamma_dw_kl:", gamma_dw_kl)
 
         # Init the Autoencoder, loss function metric and optimizer\
         # Instantiate the VAE (Continuous)
@@ -91,6 +103,8 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         # Early stopping is added to avoid overfitting
         early_stopping = EarlyStopping(patience=early_stopping_patience)
+
+        scaler = GradScaler()
 
         # Training loop
         print('Training VAE model')
@@ -110,20 +124,26 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                 # Forward pass
                 data = data.to(device)
                 optimizer.zero_grad()
-                # use the model
-                reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
-                # multiply by the factors
-                reconstruction_loss_value = reconstruction_loss_value * lambda_recon
-                mi = mi * alpha_mi
-                tc = tc * beta_tc
-                dw_kl = dw_kl * gamma_dw_kl
-                # sum total loss
-                loss = reconstruction_loss_value + mi + tc + dw_kl
 
-                loss.backward()
-                optimizer.step()
+                with autocast(dtype=torch.float16):
+                    # use the model
+                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                    # multiply by the factors
+                    reconstruction_loss_value = reconstruction_loss_value * lambda_recon
+                    mi = mi * alpha_mi
+                    tc = tc * beta_tc
+                    dw_kl = dw_kl * gamma_dw_kl
+                    # sum total loss
+                    loss = reconstruction_loss_value + mi + tc + dw_kl
+
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
+                #loss.backward()
+                #optimizer.step()
+
                 train_loss_accum += loss.item()
-
                 reconstruction_loss_accum += reconstruction_loss_value.item()
                 mi_loss_accum += mi.item()
                 tc_loss_accum += tc.item()
@@ -167,7 +187,6 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
                         raise optuna.exceptions.TrialPruned()
-                    val_loss_accum += loss.item()
 
             avg_val_loss = val_loss_accum / len(val_loader)
 
@@ -202,13 +221,13 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v20"
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v52"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=1)
+    study.optimize(train_model, n_trials=300)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
@@ -222,6 +241,18 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     best_trails_filepath = os.path.join(results_folder_path, 'best_trails.csv')
     best_trails_df.to_csv(best_trails_filepath, index=False)
     mlflow.log_artifact(best_trails_filepath)
+
+    # save plot of optimization history
+    optimization_history_fig = optuna.visualization.plot_optimization_history(study)
+    optimization_history_filepath = os.path.join(results_folder_path, 'optimization_history.png')
+    # Save the plot as a PNG image
+    optimization_history_fig.write_image(optimization_history_filepath)
+    mlflow.log_artifact(optimization_history_filepath)
+
+    param_importances_fig = optuna.visualization.plot_param_importances(study)
+    param_importances_filepath = os.path.join(results_folder_path, 'param_importances.png')
+    param_importances_fig.write_image(param_importances_filepath)
+    mlflow.log_artifact(param_importances_filepath)
 
     # Retrain the best model
     # TODO:: The retraining is done from scratch using the best hyperparameters to ensure the values benefit the model

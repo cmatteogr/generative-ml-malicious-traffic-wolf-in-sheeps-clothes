@@ -131,3 +131,28 @@ def filter_valid_traffic_features(traffic_df: pd.DataFrame, min_port: int, max_p
 
     # Return the filtered DataFrame
     return filtered_df
+
+
+def undersampling_dataset(valid_traffic_types, X_train_temp, n_instances_per_traffic_type):
+    x_train_traffic_df_list = []
+    for valid_traffic_type in valid_traffic_types:
+        # Filter by type
+        x_train_traffic_type_df = X_train_temp.loc[X_train_temp['Label'] == valid_traffic_type]
+        n_available = x_train_traffic_type_df.shape[0]
+
+        # Check if there are enough instances and if sampling is needed
+        if n_available > n_instances_per_traffic_type:
+            print(f"sampling {n_instances_per_traffic_type} instances for type '{valid_traffic_type}'")
+            x_train_traffic_type_df = x_train_traffic_type_df.sample(n=n_instances_per_traffic_type, random_state=42)
+        elif n_available > 0:
+            print(f"keeping all {n_available} instances for type '{valid_traffic_type}'")
+        else:
+            print(f"Warning: No instances found for type '{valid_traffic_type}' after previous steps.")
+            continue
+        # Append the sampled/kept data
+        x_train_traffic_df_list.append(x_train_traffic_type_df)
+
+    # Concatenate sampled dataframes
+    X_train = pd.concat(x_train_traffic_df_list, axis=0)
+
+    return X_train
