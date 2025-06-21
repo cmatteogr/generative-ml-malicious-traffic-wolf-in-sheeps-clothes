@@ -15,12 +15,14 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, PowerTransformer # Removed unused power_transform
-from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features
+from pipeline.preprocess.preprocess_base import map_port_usage_category, filter_valid_traffic_features, \
+    undersampling_dataset
 import mlflow
 import joblib
 
 from utils.constants import POWER_TRANSFORMER_NAME, ONEHOT_ENCODER_NAME, ISO_FOREST_MODEL_NAME, LABEL_ENCODER_NAME, \
     PREPROCESS_PARAMS_NAME, SCALER_NAME
+from utils.utils import generate_profiling_report
 
 
 # NOTE: Watch this video to understand about Kurtosis and Skewness:
@@ -89,6 +91,16 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     print(f'Shape after initial filtering: {traffic_df.shape}')
     if traffic_df.empty:
         raise ValueError("DataFrame is empty after initial filtering. Check filter criteria and input data.")
+
+    raw_traffic_df = undersampling_dataset(valid_traffic_types, traffic_df.copy(), n_instances_per_traffic_type)
+    raw_traffic_filepath = os.path.join(results_folder_path, 'raw_traffic.csv')
+    raw_traffic_df.to_csv(raw_traffic_filepath, index=False)
+    title = "Raw dataset Profiling"
+    report_name = 'preprocessing_traffic_raw_dataset_profiling_generator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title, data_filepath=raw_traffic_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # --- 3. Train/Test Split ---
     print(f'Splitting data with test_size={test_size}...')
@@ -343,6 +355,15 @@ def preprocessing(traffic_filepath: str, results_folder_path: str, relevant_colu
     test_traffic_df.to_csv(test_traffic_filepath, index=False)
     print(f"Preprocessed train data saved to {train_traffic_filepath}")
     print(f"Preprocessed test data saved to {test_traffic_filepath}")
+
+    # generate dataset profiling report
+    title = "Preprocessing Train dataset Profiling"
+    report_name = 'preprocessing_traffic_train_dataset_profiling_generator'
+    report_filepath = os.path.join(results_folder_path, f"{report_name}.html")
+    type_schema = {'Label': "categorical"}
+    generate_profiling_report(report_filepath=report_filepath, title=title,
+                              data_filepath=train_traffic_filepath,
+                              type_schema=type_schema, minimal=True)
 
     # --- 12. Log Parameters and Artifacts ---
     print('Logging parameters and preparing artifacts dictionary...')

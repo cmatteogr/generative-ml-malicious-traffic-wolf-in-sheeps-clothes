@@ -15,7 +15,6 @@ from torchinfo import summary
 from ml_models.callbacks import EarlyStopping
 from ml_models.malicious_traffic_b_tcvae import B_TCVAE
 from utils.constants import TRAFFIC_GENERATOR_MODEL_FILENAME
-from torch.cuda.amp import autocast, GradScaler
 import torch.backends.cudnn
 torch.backends.cudnn.benchmark = True
 
@@ -59,7 +58,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Init the autoencoder Hyperparameters
-    num_epochs = 550
+    num_epochs = 350
     early_stopping_patience = 15
 
     # log in mlflow training params
@@ -104,8 +103,6 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         # Early stopping is added to avoid overfitting
         early_stopping = EarlyStopping(patience=early_stopping_patience)
 
-        scaler = GradScaler()
-
         # Training loop
         print('Training VAE model')
         best_trial_val_loss = float('inf')
@@ -125,23 +122,18 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                 data = data.to(device)
                 optimizer.zero_grad()
 
-                with autocast(dtype=torch.float16):
-                    # use the model
-                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
-                    # multiply by the factors
-                    reconstruction_loss_value = reconstruction_loss_value * lambda_recon
-                    mi = mi * alpha_mi
-                    tc = tc * beta_tc
-                    dw_kl = dw_kl * gamma_dw_kl
-                    # sum total loss
-                    loss = reconstruction_loss_value + mi + tc + dw_kl
+                # use the model
+                reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                # multiply by the factors
+                reconstruction_loss_value = reconstruction_loss_value * lambda_recon
+                mi = mi * alpha_mi
+                tc = tc * beta_tc
+                dw_kl = dw_kl * gamma_dw_kl
+                # sum total loss
+                loss = reconstruction_loss_value + mi + tc + dw_kl
 
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-
-                #loss.backward()
-                #optimizer.step()
+                loss.backward()
+                optimizer.step()
 
                 train_loss_accum += loss.item()
                 reconstruction_loss_accum += reconstruction_loss_value.item()
@@ -171,19 +163,18 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                 for data in val_loader:
                     data = data.to(device)
 
-                    with autocast(dtype=torch.float16):
-                        reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
-                        reconstruction_loss_value = reconstruction_loss_value * lambda_recon
-                        mi = mi * alpha_mi
-                        tc = tc * beta_tc
-                        dw_kl = dw_kl * gamma_dw_kl
-                        loss = reconstruction_loss_value + mi + tc + dw_kl
+                    reconstruction_loss_value, mi, tc, dw_kl = model(data, reduction='avg')
+                    reconstruction_loss_value = reconstruction_loss_value * lambda_recon
+                    mi = mi * alpha_mi
+                    tc = tc * beta_tc
+                    dw_kl = dw_kl * gamma_dw_kl
+                    loss = reconstruction_loss_value + mi + tc + dw_kl
 
-                        val_loss_accum += loss.item()
-                        val_reconstruction_loss_accum += reconstruction_loss_value.item()
-                        val_mi_loss_accum += mi.item()
-                        val_tc_loss_accum += tc.item()
-                        val_dw_kl_loss_accum += dw_kl.item()
+                    val_loss_accum += loss.item()
+                    val_reconstruction_loss_accum += reconstruction_loss_value.item()
+                    val_mi_loss_accum += mi.item()
+                    val_tc_loss_accum += tc.item()
+                    val_dw_kl_loss_accum += dw_kl.item()
 
                     if torch.isnan(loss):  # Check for NaN loss
                         print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
