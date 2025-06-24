@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 
 from pipeline.postprocessing.postprocessing_base import post_process_data
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 D = 42  # input dimension by default
 L = 22   # number of latents by default
@@ -212,7 +214,7 @@ class Decoder(nn.Module):
         mu_d = self.decoder(z)
 
         # apply postprocessing
-        mu_d = post_process_data(mu_d)
+        # mu_d = post_process_data(mu_d)
 
         return mu_d # Return the predicted mean
 

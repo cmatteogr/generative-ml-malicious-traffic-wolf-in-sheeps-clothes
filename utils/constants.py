@@ -66,7 +66,7 @@ RELEVANT_COLUMNS = [
     ' Active Std',
 
     'Idle Mean',
-    # ' Idle Std', Low variance, must of the values are 0 ~ 92% the mean could be enough to find
+    ' Idle Std', # Low variance, must of the values are 0 ~ 92% the mean could be enough to find
 
     ' Label'
 ]

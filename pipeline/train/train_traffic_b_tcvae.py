@@ -58,7 +58,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Init the autoencoder Hyperparameters
-    num_epochs = 350
+    num_epochs = 550
     early_stopping_patience = 15
 
     # log in mlflow training params
@@ -70,21 +70,22 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
 
     def train_model(trial):
         # Init the Hyperparameters to change
-        learning_rate = trial.suggest_float('learning_rate', 1e-8, 1e-2, log=True)
-        hidden_dim = trial.suggest_int('hidden_dim', 64, 256)
-        latent_dim = trial.suggest_int('latent_dim', 16, 32)
+        learning_rate = trial.suggest_float('learning_rate', 1e-7, 1e-2, log=True)
+        hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
+        latent_dim = trial.suggest_int('latent_dim', 12, 22)
 
         # lambda for MSE, lower as possible
         lambda_recon = trial.suggest_float('lambda_recon', 10.0, 12.0)
+        #lambda_recon = trial.suggest_float('lambda_recon', 3.1, 4.0)
         # alpha for Mutual Information, around 1.0
-        #alpha_mi = trial.suggest_float('alpha_mi', 0.8, 2.0)
         alpha_mi = trial.suggest_float('alpha_mi', 0.6, 0.8)
+        #alpha_mi = trial.suggest_float('alpha_mi', 0.01, 0.011)
         # beta for Total Correlation, lower as possible
-        beta_tc = trial.suggest_float('beta_tc', 0.1, 5.0)
-        # beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
+        #beta_tc = trial.suggest_float('beta_tc', 0.01, 0.011)
+        beta_tc = trial.suggest_float('beta_tc', 1.0, 3.0)
         # gamma for Dimension-wise KL, around 1.0
-        #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.8, 5.0)
         gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.6, 0.8)
+        #gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.01, 0.011)
 
         print("learning_rate:", learning_rate)
         print("hidden_dim:", hidden_dim)
@@ -131,6 +132,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                 dw_kl = dw_kl * gamma_dw_kl
                 # sum total loss
                 loss = reconstruction_loss_value + mi + tc + dw_kl
+                #loss = reconstruction_loss_value
 
                 loss.backward()
                 optimizer.step()
@@ -169,16 +171,17 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
                     tc = tc * beta_tc
                     dw_kl = dw_kl * gamma_dw_kl
                     loss = reconstruction_loss_value + mi + tc + dw_kl
+                    #loss = reconstruction_loss_value
+
+                    if torch.isnan(loss):  # Check for NaN loss
+                        print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
+                        raise optuna.exceptions.TrialPruned()
 
                     val_loss_accum += loss.item()
                     val_reconstruction_loss_accum += reconstruction_loss_value.item()
                     val_mi_loss_accum += mi.item()
                     val_tc_loss_accum += tc.item()
                     val_dw_kl_loss_accum += dw_kl.item()
-
-                    if torch.isnan(loss):  # Check for NaN loss
-                        print(f"Warning: NaN loss detected in validation epoch {epoch + 1}. Pruning trial.")
-                        raise optuna.exceptions.TrialPruned()
 
             avg_val_loss = val_loss_accum / len(val_loader)
 
@@ -212,14 +215,14 @@ def train(traffic_data_filepath: str, results_folder_path: str, train_size_perce
         return best_trial_val_loss  # Optuna minimizes this value
 
     # Execute optuna optimizer study
-    print('train VAE')
-    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v52"
+    print('train B-TCVAE')
+    study_name = "malicious_traffic_latent_variable_gan_b_tcvae_v59"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
                                 load_if_exists=True,
                                 direction='minimize')
-    study.optimize(train_model, n_trials=300)
+    study.optimize(train_model, n_trials=200)
     # Get Best parameters
     best_params = study.best_params
     best_value = study.best_value
