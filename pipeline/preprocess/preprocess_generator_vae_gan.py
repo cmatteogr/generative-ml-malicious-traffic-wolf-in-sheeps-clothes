@@ -101,10 +101,15 @@ def preprocessing(traffic_filepath: str,
 
     # --- Feature Engineering: Port Categories ---
     print('transform features')
-    X_train.loc[:, 'Source Port'] = X_train['Source Port'].map(map_port_usage_category)
-    X_train.loc[:, 'Destination Port'] = X_train['Destination Port'].map(map_port_usage_category)
-    X_test.loc[:, 'Source Port'] = X_test['Source Port'].map(map_port_usage_category)
-    X_test.loc[:, 'Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
+    X_train['Source Port'] = X_train['Source Port'].map(map_port_usage_category)
+    X_train['Destination Port'] = X_train['Destination Port'].map(map_port_usage_category)
+    X_test['Source Port'] = X_test['Source Port'].map(map_port_usage_category)
+    X_test['Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
+
+    #X_train.loc[:, 'Source Port'] = X_train['Source Port'].map(map_port_usage_category)
+    #X_train.loc[:, 'Destination Port'] = X_train['Destination Port'].map(map_port_usage_category)
+    #X_test.loc[:, 'Source Port'] = X_test['Source Port'].map(map_port_usage_category)
+    #X_test.loc[:, 'Destination Port'] = X_test['Destination Port'].map(map_port_usage_category)
 
     # --- Feature Engineering: Remove Outliers per Feature ---
     max_quantile_total_fwd_packets = X_train['Total Fwd Packets'].quantile(0.95)
@@ -174,8 +179,8 @@ def preprocessing(traffic_filepath: str,
     # Fit on training data only
     pt_model.fit(X_train[power_columns])
     # Transform train and test data
-    X_train.loc[:, power_columns] = pt_model.transform(X_train[power_columns])
-    X_test.loc[:, power_columns] = pt_model.transform(X_test[power_columns])
+    X_train[power_columns] = pt_model.transform(X_train[power_columns])
+    X_test[power_columns] = pt_model.transform(X_test[power_columns])
     # Save the fitted PowerTransformer
     power_transformer_filepath = os.path.join(results_folder_path, POWER_TRANSFORMER_NAME)
     joblib.dump(pt_model, power_transformer_filepath)

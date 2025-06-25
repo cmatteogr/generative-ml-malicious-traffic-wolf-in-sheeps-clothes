@@ -94,18 +94,30 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     def train_model(trial):
         # Init the Hyperparameters to change
-        learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-2, log=True)
+        learning_rate = trial.suggest_float('learning_rate', 1e-7, 1e-2, log=True)
         hidden_dim = trial.suggest_int('hidden_dim', 24, 38)
-        latent_dim = trial.suggest_int('latent_dim', 12, 22)
+        latent_dim = trial.suggest_int('latent_dim', 12, 32)
 
         # lambda for MSE, lower as possible
         lambda_recon = trial.suggest_float('lambda_recon', 10.0, 12.0)
+        # lambda_recon = trial.suggest_float('lambda_recon', 3.1, 4.0)
         # alpha for Mutual Information, around 1.0
         alpha_mi = trial.suggest_float('alpha_mi', 0.6, 0.8)
+        # alpha_mi = trial.suggest_float('alpha_mi', 0.01, 0.011)
         # beta for Total Correlation, lower as possible
-        beta_tc = trial.suggest_float('beta_tc', 1.0, 30.0)
+        # beta_tc = trial.suggest_float('beta_tc', 0.01, 0.011)
+        beta_tc = trial.suggest_float('beta_tc', 1.0, 3.0)
         # gamma for Dimension-wise KL, around 1.0
         gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.6, 0.8)
+        # gamma_dw_kl = trial.suggest_float('gamma_dw_kl', 0.01, 0.011)
+
+        print("learning_rate:", learning_rate)
+        print("hidden_dim:", hidden_dim)
+        print("latent_dim:", latent_dim)
+        print("lambda_recon:", lambda_recon)
+        print("alpha_mi:", alpha_mi)
+        print("beta_tc:", beta_tc)
+        print("gamma_dw_kl:", gamma_dw_kl)
 
         # Init the Autoencoder, loss function metric and optimizer
         generative_model: B_TCVAE = B_TCVAE(input_dim=n_features, latent_dim=latent_dim, hidden_dim=hidden_dim).to(device)
@@ -268,7 +280,7 @@ def train(traffic_data_filepath: str, results_folder_path: str, discriminator_fi
 
     # Execute optuna optimizer study
     print('train VAE')
-    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v13"
+    study_name = "malicious_traffic_latent_variable_b_tcvae_gan_v14"
     storage_name = "sqlite:///{}.db".format(study_name)
     study = optuna.create_study(study_name= study_name,
                                 storage=storage_name,
