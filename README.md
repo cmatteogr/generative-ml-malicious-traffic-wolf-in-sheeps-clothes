@@ -22,7 +22,7 @@ You will find in this repo:
 ```bash
 pip install -r requirements.txt
 ```
-* Add the data.csv [dataset](https://drive.google.com/file/d/1UBWpyRqCG7QOQqQhUg--Yqj6wa6s2-l5/view?usp=drive_link) CSV file in the folder .\data
+* Add the data.csv [dataset](https://drive.google.com/file/d/1UBWpyRqCG7QOQqQhUg--Yqj6wa6s2-l5/view?usp=drive_link) CSV file in the folder .\data. This CSV files contains the traffict of all the days of the week from [Intrusion detection evaluation dataset (CIC-IDS2017)](https://www.unb.ca/cic/datasets/ids-2017.html)
 
 ## Usage
 Execute the discriminator script (classifier) main_pipeline_discriminator.py to train the classifier. 
